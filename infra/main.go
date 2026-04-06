@@ -1,12 +1,8 @@
 package main
 
 import (
-	"fmt"
-	"net/url"
-
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/acm"
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/apigatewayv2"
-	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/cloudfront"
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/dynamodb"
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/iam"
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/lambda"
@@ -39,14 +35,6 @@ func main() {
 					},
 				},
 			},
-		})
-		if err != nil {
-			return err
-		}
-
-		// ── S3: static site (private, CloudFront OAC) ──
-		siteBucket, err := s3.NewBucket(ctx, "ephemeral-site", &s3.BucketArgs{
-			ForceDestroy: pulumi.Bool(true),
 		})
 		if err != nil {
 			return err
@@ -200,20 +188,71 @@ func main() {
 			return err
 		}
 
-		// ── API Gateway ──
-		api, err := apigatewayv2.NewApi(ctx, "ephemeral-api", &apigatewayv2.ApiArgs{
-			ProtocolType: pulumi.String("HTTP"),
-			CorsConfiguration: &apigatewayv2.ApiCorsConfigurationArgs{
-				AllowOrigins: pulumi.StringArray{pulumi.Sprintf("https://%s", domain)},
-				AllowMethods: pulumi.StringArray{pulumi.String("GET"), pulumi.String("POST"), pulumi.String("OPTIONS")},
-				AllowHeaders: pulumi.StringArray{pulumi.String("Content-Type")},
-			},
+		checkFn, err := lambda.NewFunction(ctx, "ephemeral-check", &lambda.FunctionArgs{
+			Runtime: goRuntime, Handler: goHandler, Architectures: pulumi.StringArray{goArch},
+			Role: lambdaRole.Arn, Code: pulumi.NewFileArchive("../backend/dist/check"),
+			Environment: lambdaEnv, Timeout: pulumi.Int(5), MemorySize: pulumi.Int(128),
 		})
 		if err != nil {
 			return err
 		}
 
-		stage, err := apigatewayv2.NewStage(ctx, "ephemeral-stage", &apigatewayv2.StageArgs{
+		siteFn, err := lambda.NewFunction(ctx, "ephemeral-site", &lambda.FunctionArgs{
+			Runtime: goRuntime, Handler: goHandler, Architectures: pulumi.StringArray{goArch},
+			Role: lambdaRole.Arn, Code: pulumi.NewFileArchive("../backend/dist/site"),
+			Timeout: pulumi.Int(5), MemorySize: pulumi.Int(128),
+		})
+		if err != nil {
+			return err
+		}
+
+		// ── ACM certificate ──
+		cert, err := acm.NewCertificate(ctx, "ephemeral-cert", &acm.CertificateArgs{
+			DomainName:       pulumi.String(domain),
+			ValidationMethod: pulumi.String("DNS"),
+		})
+		if err != nil {
+			return err
+		}
+
+		// ── Route53 hosted zone ──
+		zone, err := route53.NewZone(ctx, "ephemeral-zone", &route53.ZoneArgs{
+			Name: pulumi.String(domain),
+		})
+		if err != nil {
+			return err
+		}
+
+		validationRecord, err := route53.NewRecord(ctx, "ephemeral-cert-validation", &route53.RecordArgs{
+			ZoneId: zone.ZoneId,
+			Name:   cert.DomainValidationOptions.Index(pulumi.Int(0)).ResourceRecordName().Elem(),
+			Type:   cert.DomainValidationOptions.Index(pulumi.Int(0)).ResourceRecordType().Elem(),
+			Records: pulumi.StringArray{
+				cert.DomainValidationOptions.Index(pulumi.Int(0)).ResourceRecordValue().Elem(),
+			},
+			Ttl: pulumi.Int(60),
+		})
+		if err != nil {
+			return err
+		}
+
+		certValidation, err := acm.NewCertificateValidation(ctx, "ephemeral-cert-valid", &acm.CertificateValidationArgs{
+			CertificateArn:        cert.Arn,
+			ValidationRecordFqdns: pulumi.StringArray{validationRecord.Fqdn},
+		})
+		if err != nil {
+			return err
+		}
+
+		// ── API Gateway ──
+		api, err := apigatewayv2.NewApi(ctx, "ephemeral-api", &apigatewayv2.ApiArgs{
+			ProtocolType: pulumi.String("HTTP"),
+		})
+		if err != nil {
+			return err
+		}
+
+		_, err = apigatewayv2.NewStage(ctx, "ephemeral-stage", &apigatewayv2.StageArgs{
 			ApiId:      api.ID(),
 			Name:       pulumi.String("$default"),
 			AutoDeploy: pulumi.Bool(true),
@@ -222,8 +261,48 @@ func main() {
 			return err
 		}
 
-		// API routes — all under /api/ prefix
-		routes := []struct {
+		// Custom domain
+		domainName, err := apigatewayv2.NewDomainName(ctx, "ephemeral-domain", &apigatewayv2.DomainNameArgs{
+			DomainName: pulumi.String(domain),
+			DomainNameConfiguration: &apigatewayv2.DomainNameDomainNameConfigurationArgs{
+				CertificateArn: certValidation.CertificateArn,
+				EndpointType:   pulumi.String("REGIONAL"),
+				SecurityPolicy: pulumi.String("TLS_1_2"),
+			},
+		})
+		if err != nil {
+			return err
+		}
+
+		_, err = apigatewayv2.NewApiMapping(ctx, "ephemeral-mapping", &apigatewayv2.ApiMappingArgs{
+			ApiId:      api.ID(),
+			DomainName: domainName.ID(),
+			Stage:      pulumi.String("$default"),
+		})
+		if err != nil {
+			return err
+		}
+
+		// Route53 → API Gateway custom domain
+		_, err = route53.NewRecord(ctx, "ephemeral-dns", &route53.RecordArgs{
+			ZoneId: zone.ZoneId,
+			Name:   pulumi.String(domain),
+			Type:   pulumi.String("A"),
+			Aliases: route53.RecordAliasArray{
+				&route53.RecordAliasArgs{
+					Name:                 domainName.DomainNameConfiguration.TargetDomainName().Elem(),
+					ZoneId:               domainName.DomainNameConfiguration.HostedZoneId().Elem(),
+					EvaluateTargetHealth: pulumi.Bool(false),
+				},
+			},
+		})
+		if err != nil {
+			return err
+		}
+
+		// ── Routes ──
+		// API routes
+		apiRoutes := []struct {
 			name   string
 			method string
 			path   string
@@ -234,9 +313,10 @@ func main() {
 			{"stream", "GET", "/api/stream/{session_id}", streamFn},
 			{"heartbeat", "POST", "/api/heartbeat/{session_id}", heartbeatFn},
 			{"complete", "POST", "/api/complete/{session_id}", completeFn},
+			{"check", "GET", "/api/check/{token}", checkFn},
 		}
 
-		for _, r := range routes {
+		for _, r := range apiRoutes {
 			integration, err := apigatewayv2.NewIntegration(ctx, "integration-"+r.name, &apigatewayv2.IntegrationArgs{
 				ApiId:                api.ID(),
 				IntegrationType:      pulumi.String("AWS_PROXY"),
@@ -267,213 +347,39 @@ func main() {
 			}
 		}
 
-		// ── ACM certificate (must be us-east-1 for CloudFront) ──
-		cert, err := acm.NewCertificate(ctx, "ephemeral-cert", &acm.CertificateArgs{
-			DomainName:       pulumi.String(domain),
-			ValidationMethod: pulumi.String("DNS"),
+		// Site catch-all (lowest priority — $default route)
+		siteIntegration, err := apigatewayv2.NewIntegration(ctx, "integration-site", &apigatewayv2.IntegrationArgs{
+			ApiId:                api.ID(),
+			IntegrationType:      pulumi.String("AWS_PROXY"),
+			IntegrationUri:       siteFn.Arn,
+			PayloadFormatVersion: pulumi.String("2.0"),
 		})
 		if err != nil {
 			return err
 		}
 
-		// ── Route53 hosted zone ──
-		zone, err := route53.NewZone(ctx, "ephemeral-zone", &route53.ZoneArgs{
-			Name: pulumi.String(domain),
+		_, err = apigatewayv2.NewRoute(ctx, "route-site", &apigatewayv2.RouteArgs{
+			ApiId:    api.ID(),
+			RouteKey: pulumi.String("$default"),
+			Target:   siteIntegration.ID().ApplyT(func(id string) string { return "integrations/" + id }).(pulumi.StringOutput),
 		})
 		if err != nil {
 			return err
 		}
 
-		// DNS validation record for ACM
-		validationRecord, err := route53.NewRecord(ctx, "ephemeral-cert-validation", &route53.RecordArgs{
-			ZoneId: zone.ZoneId,
-			Name:   cert.DomainValidationOptions.Index(pulumi.Int(0)).ResourceRecordName().Elem(),
-			Type:   cert.DomainValidationOptions.Index(pulumi.Int(0)).ResourceRecordType().Elem(),
-			Records: pulumi.StringArray{
-				cert.DomainValidationOptions.Index(pulumi.Int(0)).ResourceRecordValue().Elem(),
-			},
-			Ttl: pulumi.Int(60),
-		})
-		if err != nil {
-			return err
-		}
-
-		certValidation, err := acm.NewCertificateValidation(ctx, "ephemeral-cert-valid", &acm.CertificateValidationArgs{
-			CertificateArn:        cert.Arn,
-			ValidationRecordFqdns: pulumi.StringArray{validationRecord.Fqdn},
-		})
-		if err != nil {
-			return err
-		}
-
-		// ── CloudFront OAC for S3 ──
-		oac, err := cloudfront.NewOriginAccessControl(ctx, "ephemeral-oac", &cloudfront.OriginAccessControlArgs{
-			OriginAccessControlOriginType: pulumi.String("s3"),
-			SigningBehavior:               pulumi.String("always"),
-			SigningProtocol:               pulumi.String("sigv4"),
-		})
-		if err != nil {
-			return err
-		}
-
-		// S3 bucket policy for CloudFront OAC
-		// (set after CloudFront distribution is created)
-
-		// ── CloudFront distribution ──
-		apiOriginId := "api"
-		s3OriginId := "s3-site"
-
-		cdn, err := cloudfront.NewDistribution(ctx, "ephemeral-cdn", &cloudfront.DistributionArgs{
-			Enabled:           pulumi.Bool(true),
-			DefaultRootObject: pulumi.String("index.html"),
-			Aliases:           pulumi.StringArray{pulumi.String(domain)},
-
-			Origins: cloudfront.DistributionOriginArray{
-				// S3 origin for static files
-				&cloudfront.DistributionOriginArgs{
-					OriginId:              pulumi.String(s3OriginId),
-					DomainName:            siteBucket.BucketRegionalDomainName,
-					OriginAccessControlId: oac.ID(),
-				},
-				// API Gateway origin
-				&cloudfront.DistributionOriginArgs{
-					OriginId: pulumi.String(apiOriginId),
-					DomainName: api.ApiEndpoint.ApplyT(func(endpoint string) string {
-						u, _ := url.Parse(endpoint)
-						return u.Host
-					}).(pulumi.StringOutput),
-					CustomOriginConfig: &cloudfront.DistributionOriginCustomOriginConfigArgs{
-						HttpPort:             pulumi.Int(80),
-						HttpsPort:            pulumi.Int(443),
-						OriginProtocolPolicy: pulumi.String("https-only"),
-						OriginSslProtocols:   pulumi.StringArray{pulumi.String("TLSv1.2")},
-					},
-				},
-			},
-
-			// Default: serve from S3
-			DefaultCacheBehavior: &cloudfront.DistributionDefaultCacheBehaviorArgs{
-				TargetOriginId:       pulumi.String(s3OriginId),
-				ViewerProtocolPolicy: pulumi.String("redirect-to-https"),
-				AllowedMethods:       pulumi.StringArray{pulumi.String("GET"), pulumi.String("HEAD")},
-				CachedMethods:        pulumi.StringArray{pulumi.String("GET"), pulumi.String("HEAD")},
-				ForwardedValues: &cloudfront.DistributionDefaultCacheBehaviorForwardedValuesArgs{
-					QueryString: pulumi.Bool(false),
-					Cookies: &cloudfront.DistributionDefaultCacheBehaviorForwardedValuesCookiesArgs{
-						Forward: pulumi.String("none"),
-					},
-				},
-				Compress: pulumi.Bool(true),
-			},
-
-			// /api/* → API Gateway
-			OrderedCacheBehaviors: cloudfront.DistributionOrderedCacheBehaviorArray{
-				&cloudfront.DistributionOrderedCacheBehaviorArgs{
-					PathPattern:          pulumi.String("/api/*"),
-					TargetOriginId:       pulumi.String(apiOriginId),
-					ViewerProtocolPolicy: pulumi.String("redirect-to-https"),
-					AllowedMethods: pulumi.StringArray{
-						pulumi.String("GET"), pulumi.String("HEAD"), pulumi.String("OPTIONS"),
-						pulumi.String("PUT"), pulumi.String("POST"), pulumi.String("PATCH"), pulumi.String("DELETE"),
-					},
-					CachedMethods: pulumi.StringArray{pulumi.String("GET"), pulumi.String("HEAD")},
-					ForwardedValues: &cloudfront.DistributionOrderedCacheBehaviorForwardedValuesArgs{
-						QueryString: pulumi.Bool(true),
-						Headers: pulumi.StringArray{
-							pulumi.String("Content-Type"),
-							pulumi.String("Accept"),
-							pulumi.String("Origin"),
-						},
-						Cookies: &cloudfront.DistributionOrderedCacheBehaviorForwardedValuesCookiesArgs{
-							Forward: pulumi.String("none"),
-						},
-					},
-					DefaultTtl: pulumi.Int(0),
-					MaxTtl:     pulumi.Int(0),
-					MinTtl:     pulumi.Int(0),
-				},
-			},
-
-			// SPA routing: 403/404 from S3 → serve index.html with 200
-			CustomErrorResponses: cloudfront.DistributionCustomErrorResponseArray{
-				&cloudfront.DistributionCustomErrorResponseArgs{
-					ErrorCode:            pulumi.Int(403),
-					ResponseCode:         pulumi.Int(200),
-					ResponsePagePath:     pulumi.String("/index.html"),
-					ErrorCachingMinTtl:   pulumi.Int(0),
-				},
-				&cloudfront.DistributionCustomErrorResponseArgs{
-					ErrorCode:            pulumi.Int(404),
-					ResponseCode:         pulumi.Int(200),
-					ResponsePagePath:     pulumi.String("/index.html"),
-					ErrorCachingMinTtl:   pulumi.Int(0),
-				},
-			},
-
-			ViewerCertificate: &cloudfront.DistributionViewerCertificateArgs{
-				AcmCertificateArn:      certValidation.CertificateArn,
-				SslSupportMethod:       pulumi.String("sni-only"),
-				MinimumProtocolVersion: pulumi.String("TLSv1.2_2021"),
-			},
-
-			Restrictions: &cloudfront.DistributionRestrictionsArgs{
-				GeoRestriction: &cloudfront.DistributionRestrictionsGeoRestrictionArgs{
-					RestrictionType: pulumi.String("none"),
-				},
-			},
-		})
-		if err != nil {
-			return err
-		}
-
-		// S3 bucket policy: allow CloudFront OAC
-		_, err = s3.NewBucketPolicy(ctx, "site-policy", &s3.BucketPolicyArgs{
-			Bucket: siteBucket.ID(),
-			Policy: pulumi.All(siteBucket.Arn, cdn.Arn).ApplyT(func(args []interface{}) string {
-				bucketArn := args[0].(string)
-				cdnArn := args[1].(string)
-				return fmt.Sprintf(`{
-					"Version": "2012-10-17",
-					"Statement": [{
-						"Effect": "Allow",
-						"Principal": {"Service": "cloudfront.amazonaws.com"},
-						"Action": "s3:GetObject",
-						"Resource": "%s/*",
-						"Condition": {
-							"StringEquals": {
-								"AWS:SourceArn": "%s"
-							}
-						}
-					}]
-				}`, bucketArn, cdnArn)
-			}).(pulumi.StringOutput),
-		})
-		if err != nil {
-			return err
-		}
-
-		// ── Route53 A record → CloudFront ──
-		_, err = route53.NewRecord(ctx, "ephemeral-dns", &route53.RecordArgs{
-			ZoneId: zone.ZoneId,
-			Name:   pulumi.String(domain),
-			Type:   pulumi.String("A"),
-			Aliases: route53.RecordAliasArray{
-				&route53.RecordAliasArgs{
-					Name:                 cdn.DomainName,
-					ZoneId:               cdn.HostedZoneId,
-					EvaluateTargetHealth: pulumi.Bool(false),
-				},
-			},
+		_, err = lambda.NewPermission(ctx, "permission-site", &lambda.PermissionArgs{
+			Action:    pulumi.String("lambda:InvokeFunction"),
+			Function:  siteFn.Name,
+			Principal: pulumi.String("apigateway.amazonaws.com"),
+			SourceArn: api.ExecutionArn.ApplyT(func(arn string) string { return arn + "/*/*" }).(pulumi.StringOutput),
 		})
 		if err != nil {
 			return err
 		}
 
 		// ── Exports ──
-		ctx.Export("cdnDomain", cdn.DomainName)
-		ctx.Export("apiUrl", stage.InvokeUrl)
+		ctx.Export("apiUrl", api.ApiEndpoint)
 		ctx.Export("audioBucket", audioBucket.ID())
-		ctx.Export("siteBucket", siteBucket.ID())
 		ctx.Export("nameServers", zone.NameServers)
 		ctx.Export("tokensTable", tokensTable.Name)
 		ctx.Export("sessionsTable", sessionsTable.Name)

@@ -1,14 +1,12 @@
 # ephemeral.website
 
-Upload audio. Share a link. One listen, then it's gone.
+One listen. Then it's in their head.
 
-## How it works
+Upload or record audio, name a link, share it. The recipient gets one listen — forward-only, no rewind, no replay. Pause triggers a 15-second countdown. When it hits zero, the audio is gone. After playback completes, the URL 404s. The S3 object is deleted. The bits are gone.
 
-1. Upload an audio file (max 5 MB)
-2. Get a shareable link
-3. Recipient clicks the link and hears the audio once
-4. Pause is allowed — but a 15-second countdown starts. If it hits zero, the audio is gone.
-5. No rewind. No replay. After playback completes, the URL returns 404.
+## Stack
+
+Go everywhere. Lambda functions, API Gateway, DynamoDB, S3 pre-signed URLs, Route53. No frameworks, no CloudFront. Frontend is vanilla HTML/CSS/JS embedded in a Go binary.
 
 ## Deploy
 
@@ -18,8 +16,6 @@ cd ../infra && pulumi up
 ```
 
 ## Dev
-
-Backend tests require DynamoDB Local:
 
 ```bash
 docker run -d -p 8000:8000 amazon/dynamodb-local
