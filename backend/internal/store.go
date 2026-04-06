@@ -20,6 +20,7 @@ type Token struct {
 	Token     string `dynamodbav:"token"`
 	S3Key     string `dynamodbav:"s3_key"`
 	Note      string `dynamodbav:"note,omitempty"`
+	Waveform  string `dynamodbav:"waveform,omitempty"`
 	CreatedAt string `dynamodbav:"created_at"`
 	TTL       int64  `dynamodbav:"ttl"`
 }
@@ -105,7 +106,7 @@ func (s *Store) PresignStream(ctx context.Context, s3Key string) (string, error)
 	return req.URL, nil
 }
 
-func (s *Store) CreateToken(ctx context.Context, tokenID, s3Key, note string) (Token, error) {
+func (s *Store) CreateToken(ctx context.Context, tokenID, s3Key, note, waveform string) (Token, error) {
 	if tokenID == "" {
 		tokenID = uuid.New().String()
 	}
@@ -115,6 +116,7 @@ func (s *Store) CreateToken(ctx context.Context, tokenID, s3Key, note string) (T
 		Token:     tokenID,
 		S3Key:     s3Key,
 		Note:      note,
+		Waveform:  waveform,
 		CreatedAt: now.UTC().Format(time.RFC3339),
 		TTL:       now.Add(2 * 24 * time.Hour).Unix(),
 	}

@@ -106,6 +106,7 @@ function initUpload() {
                 }
 
                 selectedFile = new File([blob], 'recording.webm', { type: 'audio/webm' });
+                computeWaveform(selectedFile).then(w => { waveformData = w; });
                 recordArea.hidden = true;
                 uploadArea.hidden = true;
                 document.querySelector('.input-toggle').hidden = true;
@@ -194,6 +195,45 @@ function initUpload() {
         setTimeout(() => copyBtn.textContent = 'Copy', 2000);
     });
 
+    // Native share sheet on mobile
+    const shareBtn = document.getElementById('share-btn');
+    if (navigator.share) {
+        shareBtn.hidden = false;
+        shareBtn.addEventListener('click', () => {
+            navigator.share({
+                title: 'ephemeral',
+                text: 'Listen once, then it\'s gone.',
+                url: linkOutput.value,
+            });
+        });
+    }
+
+    let waveformData = '';
+
+    async function computeWaveform(file) {
+        try {
+            const arrayBuffer = await file.arrayBuffer();
+            const audioCtx = new AudioContext();
+            const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+            const raw = audioBuffer.getChannelData(0);
+            const samples = 100;
+            const blockSize = Math.floor(raw.length / samples);
+            const peaks = [];
+            for (let i = 0; i < samples; i++) {
+                let sum = 0;
+                for (let j = 0; j < blockSize; j++) {
+                    sum += Math.abs(raw[i * blockSize + j]);
+                }
+                peaks.push(sum / blockSize);
+            }
+            const max = Math.max(...peaks);
+            audioCtx.close();
+            return peaks.map(p => Math.round((p / max) * 100)).join(',');
+        } catch {
+            return '';
+        }
+    }
+
     function selectFile(file) {
         if (!file.type.startsWith('audio/')) {
             alert('Please select an audio file.');
@@ -204,6 +244,7 @@ function initUpload() {
             return;
         }
         selectedFile = file;
+        computeWaveform(file).then(w => { waveformData = w; });
         uploadArea.hidden = true;
         recordArea.hidden = true;
         document.querySelector('.input-toggle').hidden = true;
@@ -227,6 +268,7 @@ function initUpload() {
                 body: JSON.stringify({
                     slug: slugInput.value.trim() || undefined,
                     note: noteInput.value.trim() || undefined,
+                    waveform: waveformData || undefined,
                     content_type: selectedFile.type,
                 }),
             });
@@ -296,7 +338,6 @@ function initPlayer(token) {
     const playBtn = document.getElementById('play-btn');
     const pillFill = document.getElementById('pill-fill');
     const pillLabel = document.getElementById('pill-label');
-    const saveBtn = document.getElementById('save-btn');
     const pauseBtn = document.getElementById('pause-btn');
     const playFill = document.getElementById('play-fill');
     const resumeBtn = document.getElementById('resume-btn');
@@ -307,6 +348,26 @@ function initPlayer(token) {
     const countdownArc = document.getElementById('countdown-arc');
     const countdownNumber = document.getElementById('countdown-number');
     const countdownRing = document.getElementById('resume-btn');
+
+    function renderWaveform(container, points) {
+        // Create SVG waveform as background of the pill fill
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.setAttribute('viewBox', `0 0 ${points.length} 100`);
+        svg.setAttribute('preserveAspectRatio', 'none');
+        svg.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;';
+
+        let path = `M0,${100 - points[0] * 0.4 - 30}`;
+        for (let i = 1; i < points.length; i++) {
+            path += ` L${i},${100 - points[i] * 0.4 - 30}`;
+        }
+        path += ` L${points.length - 1},100 L0,100 Z`;
+
+        const pathEl = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        pathEl.setAttribute('d', path);
+        pathEl.setAttribute('fill', 'rgba(255,255,255,0.15)');
+        svg.appendChild(pathEl);
+        container.appendChild(svg);
+    }
 
     function formatTime(s) {
         const m = Math.floor(s / 60);
@@ -323,8 +384,10 @@ function initPlayer(token) {
     function gone(played) {
         if (played) {
             document.getElementById('gone-msg').textContent = 'now it\'s in your head.';
+            if (navigator.vibrate) navigator.vibrate(200);
         }
         showState('gone');
+        document.body.classList.remove('breathing', 'breath-held');
         document.getElementById('note-display').hidden = true;
         if (audio) {
             audio.pause();
@@ -404,11 +467,17 @@ function initPlayer(token) {
     }
 
     // Check if token exists before showing play UI
+    let tokenNote = null;
+    let tokenWaveform = null;
+
     (async () => {
         try {
             const resp = await fetch(`${API}/check/${token}`);
             const data = await resp.json();
             if (data.exists === 'true') {
+                tokenNote = data.note || null;
+                tokenWaveform = data.waveform ? data.waveform.split(',').map(Number) : null;
+                if (tokenWaveform) renderWaveform(pillFill, tokenWaveform);
                 showState('ready');
             } else {
                 gone();
@@ -422,13 +491,35 @@ function initPlayer(token) {
     let startRAF = null;
     let cancelled = false;
 
+    let counting = false;
+
     playBtn.addEventListener('click', () => {
+        if (counting) {
+            // Cancel
+            cancelled = true;
+            counting = false;
+            cancelAnimationFrame(startRAF);
+            pillLabel.textContent = '▶ play once';
+            pillLabel.style.opacity = 1;
+            pillFill.style.width = '0%';
+            document.getElementById('note-display').hidden = true;
+            document.getElementById('default-msg').hidden = false;
+            return;
+        }
+
         cancelled = false;
-        playBtn.disabled = true;
-        reveal(saveBtn);
-        pillLabel.textContent = '3';
+        counting = true;
+        pillLabel.textContent = 'save for later';
         pillFill.style.transition = 'none';
         pillFill.style.width = '0%';
+
+        // Show note during countdown
+        if (tokenNote) {
+            const noteDisplay = document.getElementById('note-display');
+            noteDisplay.textContent = tokenNote;
+            reveal(noteDisplay);
+            document.getElementById('default-msg').hidden = true;
+        }
 
         const startTime = Date.now();
         const duration = 3000;
@@ -438,29 +529,18 @@ function initPlayer(token) {
             const elapsed = Date.now() - startTime;
             const pct = Math.min(elapsed / duration, 1);
             pillFill.style.width = `${pct * 100}%`;
-
-            const remaining = Math.ceil((duration - elapsed) / 1000);
-            if (remaining > 0) {
-                pillLabel.textContent = `${remaining}`;
-            }
+            pillLabel.style.opacity = 1 - pct;
 
             if (pct < 1) {
                 startRAF = requestAnimationFrame(tick);
             } else {
+                counting = false;
                 pillLabel.textContent = '▶';
+                pillLabel.style.opacity = 1;
                 beginPlayback();
             }
         }
         startRAF = requestAnimationFrame(tick);
-    });
-
-    saveBtn.addEventListener('click', () => {
-        cancelled = true;
-        cancelAnimationFrame(startRAF);
-        playBtn.disabled = false;
-        saveBtn.hidden = true;
-        pillLabel.textContent = '▶ play once';
-        pillFill.style.width = '0%';
     });
 
     async function beginPlayback() {
@@ -469,12 +549,7 @@ function initPlayer(token) {
 
         sessionId = session.session_id;
 
-        if (session.note) {
-            const noteDisplay = document.getElementById('note-display');
-            noteDisplay.textContent = session.note;
-            noteDisplay.hidden = false;
-            document.getElementById('default-msg').hidden = true;
-        }
+        // Note already shown during countdown if present
 
         const streamResp = await fetch(`${API}/stream/${sessionId}`);
         if (!streamResp.ok) {
@@ -502,8 +577,11 @@ function initPlayer(token) {
             gone();
         });
 
+        if (tokenWaveform) renderWaveform(playFill, tokenWaveform);
         audio.play();
         showState('playing');
+        document.body.classList.add('breathing');
+        document.body.classList.remove('breath-held');
 
         heartbeatTimer = setInterval(sendHeartbeat, HEARTBEAT_INTERVAL);
     }
@@ -512,6 +590,7 @@ function initPlayer(token) {
         if (!audio) return;
         audio.pause();
         showState('paused');
+        document.body.classList.add('breath-held');
         startCountdown();
     });
 
@@ -520,6 +599,7 @@ function initPlayer(token) {
         clearInterval(countdownTimer);
         audio.play();
         showState('playing');
+        document.body.classList.remove('breath-held');
     });
 
 }

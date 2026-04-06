@@ -7,6 +7,7 @@ import (
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
+	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	ddbtypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 )
@@ -24,7 +25,7 @@ func handler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.AP
 
 	tokenID := req.PathParameters["token"]
 	if tokenID == "" {
-		return internal.NotFound(), nil
+		return internal.JSON(200, map[string]string{"exists": "false"}), nil
 	}
 
 	result, err := store.DDB.GetItem(ctx, &dynamodb.GetItemInput{
@@ -37,7 +38,20 @@ func handler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.AP
 		return internal.JSON(200, map[string]string{"exists": "false"}), nil
 	}
 
-	return internal.JSON(200, map[string]string{"exists": "true"}), nil
+	var tok internal.Token
+	if err := attributevalue.UnmarshalMap(result.Item, &tok); err != nil {
+		return internal.JSON(200, map[string]string{"exists": "false"}), nil
+	}
+
+	resp := map[string]string{"exists": "true"}
+	if tok.Note != "" {
+		resp["note"] = tok.Note
+	}
+	if tok.Waveform != "" {
+		resp["waveform"] = tok.Waveform
+	}
+
+	return internal.JSON(200, resp), nil
 }
 
 func main() {

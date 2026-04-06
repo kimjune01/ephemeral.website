@@ -478,7 +478,7 @@ h1 {
     width: 100%;
     max-width: 320px;
     height: 72px;
-    border-radius: 36px;
+    border-radius: 18px;
     border: 1px solid #888;
     background: transparent;
     color: #ccc;
@@ -507,12 +507,45 @@ h1 {
     width: 0%;
     background: rgba(255, 255, 255, 0.1);
     transition: width 0.1s linear;
-    border-radius: 36px;
+    border-radius: 18px;
 }
 
 .pill-label {
     position: relative;
     z-index: 1;
+}
+
+.share-btn {
+    background: #fff;
+    color: #0a0a0a;
+    border: none;
+    border-radius: 2px;
+    padding: 0.75rem 1.5rem;
+    cursor: pointer;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    transition: opacity 0.2s;
+}
+
+.share-btn:hover {
+    opacity: 0.8;
+}
+
+/* Breathing animation during playback */
+@keyframes breathe {
+    0%, 100% { background-color: #0a0a0a; }
+    50% { background-color: #0f0f0f; }
+}
+
+body.breathing {
+    animation: breathe 4s ease-in-out infinite;
+}
+
+body.breath-held {
+    animation-play-state: paused;
 }
 
 .save-btn {

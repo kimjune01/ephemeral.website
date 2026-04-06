@@ -23,6 +23,7 @@ var store *internal.Store
 type uploadRequest struct {
 	Slug        string `json:"slug"`
 	Note        string `json:"note"`
+	Waveform    string `json:"waveform"`
 	ContentType string `json:"content_type"`
 }
 
@@ -57,7 +58,7 @@ func handler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.AP
 	s3Key := fmt.Sprintf("audio/%s", uuid.New().String())
 
 	// Create token first (fails fast on slug collision)
-	tok, err := store.CreateToken(ctx, body.Slug, s3Key, body.Note)
+	tok, err := store.CreateToken(ctx, body.Slug, s3Key, body.Note, body.Waveform)
 	if err != nil {
 		if err.Error() == "token already taken" {
 			return internal.Error(409, "slug already taken"), nil

@@ -82,7 +82,7 @@ func TestCreateTokenAndBurn(t *testing.T) {
 	store := setupTestStore(t)
 	ctx := context.Background()
 
-	tok, err := store.CreateToken(ctx, "", "audio/test.mp3", "")
+	tok, err := store.CreateToken(ctx, "", "audio/test.mp3", "", "")
 	if err != nil {
 		t.Fatalf("CreateToken: %v", err)
 	}
@@ -128,7 +128,7 @@ func TestCustomSlug(t *testing.T) {
 	store := setupTestStore(t)
 	ctx := context.Background()
 
-	tok, err := store.CreateToken(ctx, "for-sarah", "audio/test.mp3", "")
+	tok, err := store.CreateToken(ctx, "for-sarah", "audio/test.mp3", "", "")
 	if err != nil {
 		t.Fatalf("CreateToken: %v", err)
 	}
@@ -141,12 +141,12 @@ func TestSlugCollision(t *testing.T) {
 	store := setupTestStore(t)
 	ctx := context.Background()
 
-	_, err := store.CreateToken(ctx, "my-song", "audio/a.mp3", "")
+	_, err := store.CreateToken(ctx, "my-song", "audio/a.mp3", "", "")
 	if err != nil {
 		t.Fatalf("first CreateToken: %v", err)
 	}
 
-	_, err = store.CreateToken(ctx, "my-song", "audio/b.mp3", "")
+	_, err = store.CreateToken(ctx, "my-song", "audio/b.mp3", "", "")
 	if err == nil {
 		t.Fatal("expected collision error, got nil")
 	}
@@ -159,7 +159,7 @@ func TestEmptySlugGeneratesUUID(t *testing.T) {
 	store := setupTestStore(t)
 	ctx := context.Background()
 
-	tok, err := store.CreateToken(ctx, "", "audio/test.mp3", "")
+	tok, err := store.CreateToken(ctx, "", "audio/test.mp3", "", "")
 	if err != nil {
 		t.Fatalf("CreateToken: %v", err)
 	}
@@ -172,7 +172,7 @@ func TestConcurrentBurnSameToken(t *testing.T) {
 	store := setupTestStore(t)
 	ctx := context.Background()
 
-	tok, err := store.CreateToken(ctx, "", "audio/race.mp3", "")
+	tok, err := store.CreateToken(ctx, "", "audio/race.mp3", "", "")
 	if err != nil {
 		t.Fatalf("CreateToken: %v", err)
 	}
@@ -202,7 +202,7 @@ func TestNotePropagatesToSession(t *testing.T) {
 	store := setupTestStore(t)
 	ctx := context.Background()
 
-	tok, err := store.CreateToken(ctx, "", "audio/test.mp3", "listen to this")
+	tok, err := store.CreateToken(ctx, "", "audio/test.mp3", "listen to this", "")
 	if err != nil {
 		t.Fatalf("CreateToken: %v", err)
 	}
@@ -223,7 +223,7 @@ func TestEmptyNoteOmitted(t *testing.T) {
 	store := setupTestStore(t)
 	ctx := context.Background()
 
-	tok, err := store.CreateToken(ctx, "", "audio/test.mp3", "")
+	tok, err := store.CreateToken(ctx, "", "audio/test.mp3", "", "")
 	if err != nil {
 		t.Fatalf("CreateToken: %v", err)
 	}
@@ -241,7 +241,7 @@ func TestNotePreservedInGetSession(t *testing.T) {
 	store := setupTestStore(t)
 	ctx := context.Background()
 
-	tok, _ := store.CreateToken(ctx, "", "audio/test.mp3", "remember this")
+	tok, _ := store.CreateToken(ctx, "", "audio/test.mp3", "remember this", "")
 	sess, _ := store.BurnToken(ctx, tok.Token)
 
 	got, err := store.GetSession(ctx, sess.SessionID)
@@ -259,7 +259,7 @@ func TestGetSession(t *testing.T) {
 	store := setupTestStore(t)
 	ctx := context.Background()
 
-	tok, _ := store.CreateToken(ctx, "", "audio/test.mp3", "")
+	tok, _ := store.CreateToken(ctx, "", "audio/test.mp3", "", "")
 	sess, _ := store.BurnToken(ctx, tok.Token)
 
 	got, err := store.GetSession(ctx, sess.SessionID)
@@ -285,7 +285,7 @@ func TestGetSessionAfterExpireStatus(t *testing.T) {
 	store := setupTestStore(t)
 	ctx := context.Background()
 
-	tok, _ := store.CreateToken(ctx, "", "audio/test.mp3", "")
+	tok, _ := store.CreateToken(ctx, "", "audio/test.mp3", "", "")
 	sess, _ := store.BurnToken(ctx, tok.Token)
 
 	// Directly mark status without S3 delete (no local S3)
@@ -319,7 +319,7 @@ func TestHeartbeat(t *testing.T) {
 	store := setupTestStore(t)
 	ctx := context.Background()
 
-	tok, _ := store.CreateToken(ctx, "", "audio/test.mp3", "")
+	tok, _ := store.CreateToken(ctx, "", "audio/test.mp3", "", "")
 	sess, _ := store.BurnToken(ctx, tok.Token)
 
 	err := store.Heartbeat(ctx, sess.SessionID)
@@ -340,7 +340,7 @@ func TestHeartbeatOnCompletedSession(t *testing.T) {
 	store := setupTestStore(t)
 	ctx := context.Background()
 
-	tok, _ := store.CreateToken(ctx, "", "audio/test.mp3", "")
+	tok, _ := store.CreateToken(ctx, "", "audio/test.mp3", "", "")
 	sess, _ := store.BurnToken(ctx, tok.Token)
 
 	_ = store.ExpireSession(ctx, sess.SessionID, sess.S3Key)
@@ -368,7 +368,7 @@ func TestSessionExpiredAfterPauseTimeout(t *testing.T) {
 	store.PauseTimeout = 1 // 1 second for test
 	ctx := context.Background()
 
-	tok, _ := store.CreateToken(ctx, "", "audio/test.mp3", "")
+	tok, _ := store.CreateToken(ctx, "", "audio/test.mp3", "", "")
 	sess, _ := store.BurnToken(ctx, tok.Token)
 
 	time.Sleep(1100 * time.Millisecond)
@@ -384,7 +384,7 @@ func TestHeartbeatKeepsSessionAlive(t *testing.T) {
 	store.PauseTimeout = 2
 	ctx := context.Background()
 
-	tok, _ := store.CreateToken(ctx, "", "audio/test.mp3", "")
+	tok, _ := store.CreateToken(ctx, "", "audio/test.mp3", "", "")
 	sess, _ := store.BurnToken(ctx, tok.Token)
 
 	// Heartbeat at 1s, well within the 2s timeout
@@ -408,7 +408,7 @@ func TestCompleteSessionDDBOnly(t *testing.T) {
 	store := setupTestStore(t)
 	ctx := context.Background()
 
-	tok, _ := store.CreateToken(ctx, "", "audio/test.mp3", "")
+	tok, _ := store.CreateToken(ctx, "", "audio/test.mp3", "", "")
 	sess, _ := store.BurnToken(ctx, tok.Token)
 
 	// Simulate complete by updating status directly (no local S3)
@@ -446,7 +446,7 @@ func TestDoubleCompleteReturnsError(t *testing.T) {
 	store := setupTestStore(t)
 	ctx := context.Background()
 
-	tok, _ := store.CreateToken(ctx, "", "audio/test.mp3", "")
+	tok, _ := store.CreateToken(ctx, "", "audio/test.mp3", "", "")
 	sess, _ := store.BurnToken(ctx, tok.Token)
 
 	// Mark completed via DDB
