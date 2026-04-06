@@ -1,0 +1,25 @@
+# Build artifacts
+backend/dist/
+*.zip
+
+# Pulumi
+.pulumi/
+
+# Go
+backend/vendor/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env
+.env
+.env.*
+infra/ephemeral-website
