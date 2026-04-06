@@ -43,7 +43,13 @@ func handler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.AP
 		return internal.JSON(200, map[string]string{"exists": "false"}), nil
 	}
 
-	resp := map[string]string{"exists": "true"}
+	// Generate a short-lived pre-signed URL for preloading
+	streamURL, err := store.PresignStream(ctx, tok.S3Key)
+	if err != nil {
+		streamURL = ""
+	}
+
+	resp := map[string]string{"exists": "true", "stream_url": streamURL}
 	if tok.Note != "" {
 		resp["note"] = tok.Note
 	}

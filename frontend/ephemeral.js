@@ -328,6 +328,7 @@ function initPlayer(token) {
     let audio = null;
     let heartbeatTimer = null;
     let countdownTimer = null;
+    let playRAF = null;
     let countdownRemaining = PAUSE_TIMEOUT;
 
     const stateReady = document.getElementById('state-ready');
@@ -349,24 +350,25 @@ function initPlayer(token) {
     const countdownNumber = document.getElementById('countdown-number');
     const countdownRing = document.getElementById('resume-btn');
 
-    function renderWaveform(container, points) {
-        // Create SVG waveform as background of the pill fill
-        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-        svg.setAttribute('viewBox', `0 0 ${points.length} 100`);
-        svg.setAttribute('preserveAspectRatio', 'none');
-        svg.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;';
-
+    function makeWaveformPath(points) {
         let path = `M0,${100 - points[0] * 0.4 - 30}`;
         for (let i = 1; i < points.length; i++) {
             path += ` L${i},${100 - points[i] * 0.4 - 30}`;
         }
         path += ` L${points.length - 1},100 L0,100 Z`;
+        return path;
+    }
 
+    function renderWaveform(btn, fillEl, points) {
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.setAttribute('viewBox', `0 0 ${points.length} 100`);
+        svg.setAttribute('preserveAspectRatio', 'none');
+        svg.classList.add('waveform-svg');
         const pathEl = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        pathEl.setAttribute('d', path);
-        pathEl.setAttribute('fill', 'rgba(255,255,255,0.15)');
+        pathEl.setAttribute('d', makeWaveformPath(points));
+        pathEl.setAttribute('fill', 'rgba(255,255,255,0.3)');
         svg.appendChild(pathEl);
-        container.appendChild(svg);
+        fillEl.appendChild(svg);
     }
 
     function formatTime(s) {
@@ -389,25 +391,29 @@ function initPlayer(token) {
         showState('gone');
         document.body.classList.remove('breathing', 'breath-held');
         document.getElementById('note-display').hidden = true;
+        cancelAnimationFrame(playRAF);
         if (audio) {
             audio.pause();
-            audio.src = '';
+            audio.removeAttribute('src');
+            audio.load();
+            audio = null;
         }
         clearInterval(heartbeatTimer);
         clearInterval(countdownTimer);
     }
 
     async function createSession() {
-        const resp = await fetch(`${API}/session`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ token }),
-        });
-        if (!resp.ok) {
-            gone();
+        try {
+            const resp = await fetch(`${API}/session`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ token }),
+            });
+            if (!resp.ok) return null;
+            return resp.json();
+        } catch {
             return null;
         }
-        return resp.json();
     }
 
     async function sendHeartbeat() {
@@ -456,11 +462,15 @@ function initPlayer(token) {
         const pct = countdownRemaining / PAUSE_TIMEOUT;
         const offset = 283 * (1 - pct);
         countdownArc.style.strokeDashoffset = offset;
-        countdownNumber.textContent = Math.ceil(countdownRemaining);
+
+        const countdownPlay = document.querySelector('.countdown-play');
 
         countdownRing.classList.remove('warning', 'urgent');
         if (countdownRemaining <= 5) {
             countdownRing.classList.add('urgent');
+            countdownNumber.hidden = false;
+            countdownNumber.textContent = Math.ceil(countdownRemaining);
+            if (countdownPlay) countdownPlay.hidden = true;
         } else if (countdownRemaining <= 10) {
             countdownRing.classList.add('warning');
         }
@@ -469,6 +479,7 @@ function initPlayer(token) {
     // Check if token exists before showing play UI
     let tokenNote = null;
     let tokenWaveform = null;
+    let preloadedStreamUrl = null;
 
     (async () => {
         try {
@@ -477,7 +488,7 @@ function initPlayer(token) {
             if (data.exists === 'true') {
                 tokenNote = data.note || null;
                 tokenWaveform = data.waveform ? data.waveform.split(',').map(Number) : null;
-                if (tokenWaveform) renderWaveform(pillFill, tokenWaveform);
+                preloadedStreamUrl = data.stream_url || null;
                 showState('ready');
             } else {
                 gone();
@@ -535,38 +546,41 @@ function initPlayer(token) {
                 startRAF = requestAnimationFrame(tick);
             } else {
                 counting = false;
-                pillLabel.textContent = '▶';
-                pillLabel.style.opacity = 1;
-                beginPlayback();
+                startPlaying();
             }
         }
         startRAF = requestAnimationFrame(tick);
     });
 
-    async function beginPlayback() {
-        const session = await createSession();
-        if (!session) return;
+    async function startPlaying() {
+        if (!preloadedStreamUrl) { gone(); return; }
 
-        sessionId = session.session_id;
+        audio = new Audio(preloadedStreamUrl);
 
-        // Note already shown during countdown if present
-
-        const streamResp = await fetch(`${API}/stream/${sessionId}`);
-        if (!streamResp.ok) {
-            gone();
-            return;
-        }
-        const streamData = await streamResp.json();
-
-        audio = new Audio(streamData.stream_url);
-
-        audio.addEventListener('loadedmetadata', () => {
-            updateProgress(0, audio.duration);
-        });
-
-        audio.addEventListener('timeupdate', () => {
+        // Smooth progress via rAF instead of timeupdate
+        function tickPlayback() {
+            if (!audio) return;
             updateProgress(audio.currentTime, audio.duration);
-        });
+
+            // Burn token after 1 second of confirmed playback
+            if (audio.currentTime >= 1 && !sessionId) {
+                sessionId = 'pending';
+                (async () => {
+                    const session = await createSession();
+                    if (session) {
+                        sessionId = session.session_id;
+                        heartbeatTimer = setInterval(sendHeartbeat, HEARTBEAT_INTERVAL);
+                    }
+                })();
+            }
+
+            playRAF = requestAnimationFrame(tickPlayback);
+        }
+        playRAF = requestAnimationFrame(tickPlayback);
+
+        // Stop rAF loop when audio ends or errors
+        audio.addEventListener('ended', () => { cancelAnimationFrame(playRAF); });
+        audio.addEventListener('error', () => { cancelAnimationFrame(playRAF); });
 
         audio.addEventListener('ended', () => {
             sendComplete();
@@ -574,16 +588,15 @@ function initPlayer(token) {
         });
 
         audio.addEventListener('error', () => {
+            if (!audio) return;
             gone();
         });
 
-        if (tokenWaveform) renderWaveform(playFill, tokenWaveform);
+        if (tokenWaveform) renderWaveform(pauseBtn, playFill, tokenWaveform);
         audio.play();
         showState('playing');
         document.body.classList.add('breathing');
         document.body.classList.remove('breath-held');
-
-        heartbeatTimer = setInterval(sendHeartbeat, HEARTBEAT_INTERVAL);
     }
 
     pauseBtn.addEventListener('click', () => {

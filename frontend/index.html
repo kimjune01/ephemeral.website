@@ -17,12 +17,22 @@
                 then it's in their head.
             </p>
             <div class="input-toggle">
-                <button id="tab-upload" class="tab active">upload</button>
-                <button id="tab-record" class="tab">record</button>
+                <button id="tab-record" class="tab active">record</button>
+                <button id="tab-upload" class="tab">upload</button>
             </div>
 
             <div class="tab-content">
-            <div id="upload-area" class="upload-area">
+            <div id="record-area" class="record-area">
+                <div id="record-prompt" class="record-prompt">
+                    <button id="record-btn" class="record-btn">
+                        <span id="record-icon" class="record-icon"></span>
+                    </button>
+                    <p id="record-status" class="record-status">tap to record</p>
+                    <p id="record-time" class="record-time" hidden>0:00</p>
+                </div>
+            </div>
+
+            <div id="upload-area" class="upload-area" hidden>
                 <input type="file" id="file-input" accept="audio/*" hidden>
                 <div id="upload-prompt" class="upload-prompt">
                     <p><strong>Upload</strong> audio file (up to 5MB)</p>
@@ -31,16 +41,6 @@
                 <div id="upload-progress" class="upload-progress" hidden>
                     <p>Uploading...</p>
                     <div class="progress-bar"><div id="upload-progress-fill" class="progress-fill"></div></div>
-                </div>
-            </div>
-
-            <div id="record-area" class="record-area" hidden>
-                <div id="record-prompt" class="record-prompt">
-                    <button id="record-btn" class="record-btn">
-                        <span id="record-icon" class="record-icon"></span>
-                    </button>
-                    <p id="record-status" class="record-status">tap to record</p>
-                    <p id="record-time" class="record-time" hidden>0:00</p>
                 </div>
             </div>
 
@@ -100,7 +100,8 @@
                             <circle cx="50" cy="50" r="45" class="countdown-bg"/>
                             <circle cx="50" cy="50" r="45" class="countdown-arc" id="countdown-arc"/>
                         </svg>
-                        <span id="countdown-number" class="countdown-number">15</span>
+                        <span class="countdown-play">&#9654;</span>
+                        <span id="countdown-number" class="countdown-number" hidden></span>
                     </button>
                 </div>
 

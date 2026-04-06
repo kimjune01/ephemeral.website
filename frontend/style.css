@@ -499,6 +499,19 @@ h1 {
     transform: scale(0.98);
 }
 
+.waveform-svg {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    pointer-events: none;
+}
+
+/* Width matches the parent pill-btn, not the fill */
+.pill-fill .waveform-svg {
+    width: 320px; /* matches pill-btn max-width */
+}
+
 .pill-fill {
     position: absolute;
     top: 0;
@@ -507,7 +520,8 @@ h1 {
     width: 0%;
     background: rgba(255, 255, 255, 0.1);
     transition: width 0.1s linear;
-    border-radius: 18px;
+    overflow: hidden;
+    border-radius: 18px 0 0 18px;
 }
 
 .pill-label {
@@ -607,6 +621,15 @@ body.breath-held {
     stroke-dasharray: 283;
     stroke-dashoffset: 0;
     transition: stroke 0.5s;
+}
+
+.countdown-play {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-45%, -50%);
+    font-size: 2rem;
+    color: #fff;
 }
 
 .countdown-number {
