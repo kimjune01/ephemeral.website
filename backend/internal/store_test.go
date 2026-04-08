@@ -155,6 +155,58 @@ func TestSlugCollision(t *testing.T) {
 	}
 }
 
+// Upsert path: re-submitting the same token with the same s3_key updates the
+// note and waveform in place. This is what the 2-phase frontend flow relies on
+// (phase 1 reserves the slug, phase 2 adds the note).
+func TestCreateTokenUpsertsOwnRow(t *testing.T) {
+	store := setupTestStore(t)
+	ctx := context.Background()
+
+	// Phase 1: reserve "my-slug" with empty note and waveform
+	_, err := store.CreateToken(ctx, "my-slug", "audio/xyz.mp3", "", "")
+	if err != nil {
+		t.Fatalf("phase 1 CreateToken: %v", err)
+	}
+
+	// Phase 2: same token + s3_key, now with note/waveform — must succeed
+	_, err = store.CreateToken(ctx, "my-slug", "audio/xyz.mp3", "hello there", "10,20,30")
+	if err != nil {
+		t.Fatalf("phase 2 CreateToken (upsert): %v", err)
+	}
+
+	// Burn the token and check the session carries the updated note. If the
+	// upsert didn't run, the session would see an empty note.
+	sess, err := store.BurnToken(ctx, "my-slug")
+	if err != nil {
+		t.Fatalf("BurnToken: %v", err)
+	}
+	if sess.Note != "hello there" {
+		t.Fatalf("expected note %q after upsert, got %q", "hello there", sess.Note)
+	}
+}
+
+// Ownership check: a different caller using a different s3_key must NOT be
+// able to upsert an existing token. This protects against slug squatting
+// via the upsert path.
+func TestCreateTokenUpsertRejectsDifferentS3Key(t *testing.T) {
+	store := setupTestStore(t)
+	ctx := context.Background()
+
+	_, err := store.CreateToken(ctx, "shared-slug", "audio/owner.mp3", "", "")
+	if err != nil {
+		t.Fatalf("first CreateToken: %v", err)
+	}
+
+	// Attacker tries to overwrite note via upsert with a different s3_key
+	_, err = store.CreateToken(ctx, "shared-slug", "audio/attacker.mp3", "pwned", "")
+	if err == nil {
+		t.Fatal("expected collision error with mismatched s3_key, got nil")
+	}
+	if err.Error() != "token already taken" {
+		t.Fatalf("expected 'token already taken', got %q", err.Error())
+	}
+}
+
 func TestEmptySlugGeneratesUUID(t *testing.T) {
 	store := setupTestStore(t)
 	ctx := context.Background()

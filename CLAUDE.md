@@ -45,7 +45,15 @@ Edit `frontend/` — `build.sh` syncs it into `backend/cmd/site/static/` automat
 ## Tests
 
 ```bash
-# Requires DynamoDB local on :8000
+# Unit tests — require DynamoDB local on :8000
 docker run -d -p 8000:8000 amazon/dynamodb-local
 cd backend && go test ./internal/ -v
+
+# End-to-end smoke test against live infra — run after every deploy
+bash scripts/smoke-test.sh
 ```
+
+The smoke test hits https://ephemeral.website/api and walks the full
+round trip: upload → check → session burn → stream → heartbeat → complete,
+plus the 2-phase reserve + upsert flow and a real slug collision. Needs
+`curl` and `jq`. Override the API base with `API=... bash scripts/smoke-test.sh`.
