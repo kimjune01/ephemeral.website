@@ -9,15 +9,14 @@ Ephemeral audio playback. Upload audio, get a one-time link. One listen, then 40
 - **Frontend**: Vanilla HTML/CSS/JS in `frontend/`
 - **Storage**: S3 (audio), DynamoDB (tokens + sessions)
 
-## Build
+## Build & deploy
 
 ```bash
-# Backend — compile Lambda binaries
-cd backend && bash build.sh
-
-# Infra — deploy
-cd infra && pulumi up
+cd backend && bash build.sh   # copies frontend/ → embedded static, compiles Lambdas
+cd ../infra && pulumi up      # deploys all Lambdas
 ```
+
+Edit `frontend/` — `build.sh` syncs it into `backend/cmd/site/static/` automatically. Never edit the static copy directly.
 
 ## Backend structure
 

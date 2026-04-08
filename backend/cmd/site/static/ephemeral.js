@@ -89,7 +89,16 @@ function initUpload() {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             recordedChunks = [];
             recordSeconds = 0;
-            mediaRecorder = new MediaRecorder(stream);
+
+            // Use the MIME type the browser actually supports
+            const recMime = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm'
+                          : MediaRecorder.isTypeSupported('audio/mp4')  ? 'audio/mp4'
+                          : '';
+            mediaRecorder = recMime
+                ? new MediaRecorder(stream, { mimeType: recMime })
+                : new MediaRecorder(stream);
+            const actualMime = mediaRecorder.mimeType || recMime || 'audio/webm';
+            const ext = actualMime.includes('mp4') ? 'mp4' : 'webm';
 
             mediaRecorder.ondataavailable = (e) => {
                 if (e.data.size > 0) recordedChunks.push(e.data);
@@ -97,7 +106,7 @@ function initUpload() {
 
             mediaRecorder.onstop = () => {
                 stream.getTracks().forEach(t => t.stop());
-                const blob = new Blob(recordedChunks, { type: 'audio/webm' });
+                const blob = new Blob(recordedChunks, { type: actualMime });
 
                 if (blob.size > 5 * 1024 * 1024) {
                     recordStatus.textContent = 'too long (max 5 MB)';
@@ -105,7 +114,7 @@ function initUpload() {
                     return;
                 }
 
-                selectedFile = new File([blob], 'recording.webm', { type: 'audio/webm' });
+                selectedFile = new File([blob], `recording.${ext}`, { type: actualMime });
                 computeWaveform(selectedFile).then(w => { waveformData = w; });
                 recordArea.hidden = true;
                 uploadArea.hidden = true;
@@ -129,6 +138,7 @@ function initUpload() {
 
             // Volume indicator
             audioContext = new AudioContext();
+            if (audioContext.state === 'suspended') await audioContext.resume();
             const source = audioContext.createMediaStreamSource(stream);
             analyser = audioContext.createAnalyser();
             analyser.fftSize = 256;
@@ -214,6 +224,7 @@ function initUpload() {
         try {
             const arrayBuffer = await file.arrayBuffer();
             const audioCtx = new AudioContext();
+            if (audioCtx.state === 'suspended') await audioCtx.resume();
             const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
             const raw = audioBuffer.getChannelData(0);
             const samples = 100;
@@ -515,11 +526,32 @@ function initPlayer(token) {
             pillFill.style.width = '0%';
             document.getElementById('note-display').hidden = true;
             document.getElementById('default-msg').hidden = false;
+            // Clean up primed audio
+            if (audio) {
+                audio.pause();
+                audio.removeAttribute('src');
+                audio.load();
+                audio = null;
+            }
             return;
         }
 
         cancelled = false;
         counting = true;
+
+        // Prime audio in the user-gesture context so iOS allows playback
+        if (preloadedStreamUrl) {
+            audio = new Audio(preloadedStreamUrl);
+            audio.preload = 'auto';
+            audio.volume = 0;
+            const unlock = audio.play();
+            if (unlock) unlock.then(() => {
+                audio.pause();
+                audio.currentTime = 0;
+                audio.volume = 1;
+            }).catch(() => {});
+        }
+
         pillLabel.textContent = 'save for later';
         pillFill.style.transition = 'none';
         pillFill.style.width = '0%';
@@ -553,9 +585,11 @@ function initPlayer(token) {
     });
 
     async function startPlaying() {
-        if (!preloadedStreamUrl) { gone(); return; }
-
-        audio = new Audio(preloadedStreamUrl);
+        // audio was primed in the click handler; fall back to creating it if needed
+        if (!audio && preloadedStreamUrl) {
+            audio = new Audio(preloadedStreamUrl);
+        }
+        if (!audio) { gone(); return; }
 
         // Smooth progress via rAF instead of timeupdate
         function tickPlayback() {

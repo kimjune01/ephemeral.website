@@ -11,9 +11,11 @@ Go everywhere. Lambda functions, API Gateway, DynamoDB, S3 pre-signed URLs, Rout
 ## Deploy
 
 ```bash
-cd backend && bash build.sh
-cd ../infra && pulumi up
+cd backend && bash build.sh   # copies frontend/ → embedded static, compiles Lambdas
+cd ../infra && pulumi up      # deploys all Lambdas
 ```
+
+Edit `frontend/` — `build.sh` syncs it into the Go binary automatically.
 
 ## Dev
 
