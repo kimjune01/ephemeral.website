@@ -32,6 +32,8 @@ func handler(_ context.Context, req events.APIGatewayV2HTTPRequest) (events.APIG
 		filename = "static/style.css"
 	case "/ephemeral.js":
 		filename = "static/ephemeral.js"
+	case "/api", "/api/", "/api/docs":
+		filename = "static/api.html"
 	default:
 		// Everything else serves index.html (SPA routing)
 		filename = "static/index.html"

@@ -6,6 +6,7 @@ cd "$(dirname "$0")"
 # Copy frontend files into site handler for embedding
 mkdir -p cmd/site/static
 cp ../frontend/index.html cmd/site/static/
+cp ../frontend/api.html cmd/site/static/
 cp ../frontend/style.css cmd/site/static/
 cp ../frontend/ephemeral.js cmd/site/static/
 

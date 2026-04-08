@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>ephemeral api</title>
+    <link rel="stylesheet" href="/style.css">
+    <style>
+        .api-doc {
+            max-width: 720px;
+            width: 100%;
+            padding: 2rem 1.5rem;
+            text-align: left;
+            line-height: 1.7;
+            color: #aaa;
+        }
+        .api-doc h1 {
+            color: #ccc;
+            font-size: 1.6rem;
+            letter-spacing: 0.2em;
+            text-transform: lowercase;
+            margin-bottom: 0.5rem;
+        }
+        .api-doc h2 {
+            color: #888;
+            font-size: 0.85rem;
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            margin-top: 2.5rem;
+            margin-bottom: 0.75rem;
+            font-weight: 400;
+            border-top: 1px solid #222;
+            padding-top: 1.5rem;
+        }
+        .api-doc h3 {
+            color: #b8b8b8;
+            font-size: 0.8rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            margin-top: 1.5rem;
+            margin-bottom: 0.5rem;
+            font-weight: 400;
+        }
+        .api-doc p, .api-doc li {
+            font-size: 0.78rem;
+            color: #888;
+            letter-spacing: 0.02em;
+        }
+        .api-doc ul {
+            padding-left: 1.2rem;
+        }
+        .api-doc li {
+            margin-bottom: 0.25rem;
+        }
+        .api-doc code {
+            background: rgba(255, 255, 255, 0.05);
+            color: #b8b8b8;
+            padding: 0 0.35em;
+            border-radius: 2px;
+            font-size: 0.8em;
+        }
+        .api-doc pre {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid #222;
+            border-radius: 2px;
+            padding: 0.9rem 1rem;
+            font-size: 0.72rem;
+            color: #b8b8b8;
+            overflow-x: auto;
+            margin: 0.5rem 0 1rem;
+            line-height: 1.5;
+            white-space: pre;
+        }
+        .api-doc pre code {
+            background: none;
+            padding: 0;
+            font-size: inherit;
+            color: inherit;
+        }
+        .endpoint {
+            display: inline-block;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid #333;
+            border-radius: 2px;
+            padding: 0.15rem 0.5rem;
+            font-size: 0.72rem;
+            letter-spacing: 0.05em;
+            color: #ccc;
+            margin-bottom: 0.35rem;
+        }
+        .method-get { color: #7ec4cf; }
+        .method-post { color: #d4a273; }
+        .subtitle-api {
+            color: #555;
+            font-size: 0.7rem;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            margin-bottom: 2rem;
+        }
+        .subtitle-api a {
+            color: #888;
+            text-decoration: none;
+            border-bottom: 1px solid #444;
+        }
+        .subtitle-api a:hover {
+            color: #aaa;
+            border-color: #666;
+        }
+        .api-doc table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 0.5rem 0 1rem;
+            font-size: 0.72rem;
+        }
+        .api-doc th, .api-doc td {
+            text-align: left;
+            padding: 0.4rem 0.6rem;
+            border-bottom: 1px solid #222;
+            vertical-align: top;
+        }
+        .api-doc th {
+            color: #888;
+            font-weight: 400;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            font-size: 0.65rem;
+        }
+        .api-doc td code {
+            background: none;
+            padding: 0;
+            color: #b8b8b8;
+        }
+    </style>
+</head>
+<body>
+    <div class="api-doc">
+        <h1>ephemeral api</h1>
+        <p class="subtitle-api">v1 &middot; public &middot; .website only &middot; <a href="/">home</a></p>
+
+        <p>Upload audio, get a one-time playback link. When the recipient plays the link once, the audio is deleted and every endpoint referring to the token returns 404. There is no way to undelete a whisper. 404 is indistinguishable from "never existed."</p>
+
+        <p>This API is public — no keys, no auth. Browser-based CORS is restricted to the <code>.website</code> family of first-party layers (allowlist: <code>ephemeral.website</code>, <code>appreciation.website</code>, <code>confession.website</code>). Server-to-server calls work from anywhere. It is intended to be built upon.</p>
+
+        <h2>Stability</h2>
+        <p>These routes are v1 and will not change in a breaking way. New fields may be added to responses; existing fields will not be removed or renamed. Breaking changes would land under <code>/api/v2/*</code> with a deprecation period on v1.</p>
+
+        <h2>Limits</h2>
+        <table>
+            <tr><th>Limit</th><th>Value</th></tr>
+            <tr><td>Audio size</td><td>≤ 5 MB</td></tr>
+            <tr><td>Content type</td><td><code>audio/*</code></td></tr>
+            <tr><td>Slug format</td><td><code>^[a-z0-9-]{1,64}$</code></td></tr>
+            <tr><td>Note length</td><td>280 chars (server-truncates)</td></tr>
+            <tr><td>Token TTL</td><td>7 days</td></tr>
+            <tr><td>Pause timeout</td><td>15 seconds between heartbeats</td></tr>
+        </table>
+
+        <h2>Endpoints</h2>
+
+        <h3><span class="endpoint"><span class="method-post">POST</span> /api/upload</span></h3>
+        <p>Create a whisper. Returns a token, a pre-signed S3 PUT URL, and the s3_key used for storage.</p>
+<pre><code>// request
+{
+  "slug": "optional-custom-slug",
+  "note": "optional short note (≤ 280 chars)",
+  "waveform": "optional comma-separated peaks 0-100",
+  "content_type": "audio/mpeg",
+  "s3_key": "audio/&lt;uuid&gt;  (optional — see upsert)"
+}
+
+// response  201 Created
+{
+  "token": "my-slug-or-uuid",
+  "url": "/my-slug-or-uuid",
+  "upload_url": "https://s3.amazonaws.com/... (presigned PUT)",
+  "s3_key": "audio/&lt;uuid&gt;"
+}</code></pre>
+        <p><strong>Errors:</strong> <code>400</code> invalid body / format, <code>409</code> slug taken, <code>500</code> store or S3 error.</p>
+
+        <p><strong>Upsert semantics.</strong> If the slug already exists and you supply the same <code>s3_key</code> the server returned on the original create, the existing row is updated in place (note and waveform) instead of colliding. This is the authentication primitive: only the original creator holds the <code>s3_key</code>.</p>
+
+        <h3><span class="endpoint"><span class="method-get">GET</span> /api/check/{token}</span></h3>
+        <p>Check whether a token still exists. Safe to call repeatedly — does not burn the token.</p>
+<pre><code>// response 200  (token exists)
+{
+  "exists": "true",
+  "note": "optional note",
+  "waveform": "10,20,30,...",
+  "stream_url": "https://s3... (presigned, short-lived)"
+}
+
+// response 200  (token does not exist)
+{ "exists": "false" }</code></pre>
+        <p><code>exists</code> is a string, not a boolean.</p>
+
+        <h3><span class="endpoint"><span class="method-post">POST</span> /api/session</span></h3>
+        <p>Burn a token and open a playback session. Atomic — the second call on the same token returns 404.</p>
+<pre><code>// request
+{ "token": "my-slug-or-uuid" }
+
+// response 201
+{
+  "session_id": "&lt;uuid&gt;",
+  "pause_timeout": 15,
+  "note": "optional note"
+}</code></pre>
+
+        <h3><span class="endpoint"><span class="method-get">GET</span> /api/stream/{session_id}</span></h3>
+        <p>Stream the audio bytes for an active session. Raw audio with <code>Content-Type</code> header. Supports HTTP range requests.</p>
+<pre><code>&lt;audio src="https://ephemeral.website/api/stream/&lt;session_id&gt;" controls&gt;&lt;/audio&gt;</code></pre>
+
+        <h3><span class="endpoint"><span class="method-post">POST</span> /api/heartbeat/{session_id}</span></h3>
+        <p>Reset the pause timer. Call every ~5s while audio is playing. Returns 404 if the session expired.</p>
+
+        <h3><span class="endpoint"><span class="method-post">POST</span> /api/complete/{session_id}</span></h3>
+        <p>Mark session complete. Deletes the S3 object. Call on the <code>ended</code> event of the audio element.</p>
+
+        <h2>Typical flows</h2>
+
+        <h3>Create and share a whisper</h3>
+<pre><code>1. POST /api/upload     { slug, content_type }  →  { token, upload_url, s3_key }
+2. PUT  upload_url      (audio bytes)           →  200
+3. Share https://ephemeral.website/&lt;token&gt;</code></pre>
+
+        <h3>Build a layer that sends to a handle</h3>
+        <p>A layer (e.g. appreciation.website) can delegate all audio storage to ephemeral and track its own handle → token mapping:</p>
+<pre><code>On upload:
+1. POST /api/upload     { slug, content_type }  →  { token, upload_url, s3_key }
+2. PUT  upload_url      (audio bytes)
+3. Save (recipient_handle, token) in layer's own DB
+
+On inbox view:
+4. GET /api/check/{token}  →  confirm whisper still exists
+5. Redirect user to https://ephemeral.website/&lt;token&gt; for playback
+   (or embed the core player)</code></pre>
+        <p>Layers never touch audio bytes after upload. The core's one-listen rule is enforced regardless of how many layers reference it.</p>
+
+        <h3>2-phase reservation for instant share UX</h3>
+<pre><code>On file select:
+1. POST /api/upload   { content_type }                     →  { token0, upload_url, s3_key }
+2. PUT  upload_url    (start audio upload in background)
+
+On slug blur:
+3. POST /api/upload   { slug, content_type, s3_key }       →  { token: slug }  (reserves)
+
+On send:
+4. POST /api/upload   { slug, note, waveform, ..., s3_key } →  upserts note+waveform
+5. Show share page immediately — no waiting.</code></pre>
+
+        <h2>Example</h2>
+<pre><code>curl -X POST https://ephemeral.website/api/upload \
+  -H 'Content-Type: application/json' \
+  -d '{"slug":"just-for-you","content_type":"audio/mpeg"}'
+# → { "token":"just-for-you", "upload_url":"https://...", "s3_key":"audio/..." }
+
+curl -X PUT "$UPLOAD_URL" \
+  -H 'Content-Type: audio/mpeg' \
+  --data-binary @voice-memo.mp3
+# → 200
+
+# Share: https://ephemeral.website/just-for-you</code></pre>
+    </div>
+    <script>
+      // No behavior, but load the same JS so the page feels consistent.
+      // (keeps chromatic aberration on the h1 via style.css, etc.)
+    </script>
+</body>
+</html>

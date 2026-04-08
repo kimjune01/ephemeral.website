@@ -247,6 +247,26 @@ func main() {
 		// ── API Gateway ──
 		api, err := apigatewayv2.NewApi(ctx, "ephemeral-api", &apigatewayv2.ApiArgs{
 			ProtocolType: pulumi.String("HTTP"),
+			// Public API, restricted to the .website family of first-party
+			// layers. API Gateway HTTP API doesn't support glob patterns in
+			// CORS origins, so new layers must be added to this list and
+			// redeployed before their browsers can call the API.
+			CorsConfiguration: &apigatewayv2.ApiCorsConfigurationArgs{
+				AllowOrigins: pulumi.StringArray{
+					pulumi.String("https://ephemeral.website"),
+					pulumi.String("https://appreciation.website"),
+					pulumi.String("https://confession.website"),
+				},
+				AllowMethods: pulumi.StringArray{
+					pulumi.String("GET"),
+					pulumi.String("POST"),
+					pulumi.String("OPTIONS"),
+				},
+				AllowHeaders: pulumi.StringArray{
+					pulumi.String("Content-Type"),
+				},
+				MaxAge: pulumi.Int(300),
+			},
 		})
 		if err != nil {
 			return err

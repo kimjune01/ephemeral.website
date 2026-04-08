@@ -129,6 +129,26 @@ sid=$(echo "$sess" | jq -r '.session_id')
 curl -sS -o /dev/null -X POST "$API/complete/$sid"
 
 # ──────────────────────────────────────────────────────────────
+step "11a. CORS preflight for allowed origin"
+hdrs=$(curl -sS -o /dev/null -D - \
+  -X OPTIONS "$API/upload" \
+  -H 'Origin: https://confession.website' \
+  -H 'Access-Control-Request-Method: POST' \
+  -H 'Access-Control-Request-Headers: Content-Type')
+echo "$hdrs" | grep -qi "access-control-allow-origin: https://confession.website" \
+  || fail "expected CORS allow for confession.website, got: $(echo "$hdrs" | grep -i access-control || echo 'no CORS headers')"
+green "    confession.website allowed"
+
+step "11b. CORS preflight for disallowed origin"
+hdrs=$(curl -sS -o /dev/null -D - \
+  -X OPTIONS "$API/upload" \
+  -H 'Origin: https://evil.example.com' \
+  -H 'Access-Control-Request-Method: POST' \
+  -H 'Access-Control-Request-Headers: Content-Type')
+echo "$hdrs" | grep -qi "access-control-allow-origin: https://evil.example.com" \
+  && fail "evil.example.com unexpectedly allowed in CORS"
+green "    evil.example.com rejected"
+
 step "11. Real slug collision (different s3_key) must 409"
 resp1=$(curl -sS -X POST "$API/upload" \
   -H 'Content-Type: application/json' \
