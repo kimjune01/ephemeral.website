@@ -126,7 +126,7 @@ function initUpload() {
 
             mediaRecorder.start();
             recordBtn.classList.add('recording');
-            recordStatus.textContent = 'recording';
+            recordStatus.textContent = '';
             recordTime.hidden = false;
             recordTime.textContent = '0:00';
 
