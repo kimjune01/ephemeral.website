@@ -11,9 +11,12 @@ body {
     background: #0a0a0a;
     color: #e0e0e0;
     min-height: 100vh;
+    min-height: 100dvh; /* iOS dynamic viewport — accounts for Safari's UI bars */
     display: flex;
     justify-content: center;
     align-items: center;
+    overflow-x: hidden;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
 }
 
 .container {
@@ -261,8 +264,13 @@ h1 {
 
 .link-box {
     display: flex;
+    flex-wrap: wrap;
     gap: 0.5rem;
     margin-bottom: 1rem;
+}
+
+.link-box input {
+    min-width: 0; /* allow shrinking inside flex */
 }
 
 .link-box input {
@@ -306,6 +314,7 @@ h1 {
 .slug-field {
     display: flex;
     align-items: center;
+    gap: 0.25rem;
     margin-bottom: 0.75rem;
 }
 
@@ -318,6 +327,7 @@ h1 {
 
 .slug-field input {
     flex: 1;
+    min-width: 0;
     background: transparent;
     border: 1px solid #444;
     border-radius: 2px;
@@ -706,7 +716,7 @@ body.breath-held {
 /* Mobile */
 @media (max-width: 480px) {
     .container {
-        padding: 1.5rem;
+        padding: 1.25rem;
     }
 
     h1 {
@@ -716,5 +726,78 @@ body.breath-held {
     /* Prevent iOS zoom on input focus */
     input, textarea, select {
         font-size: 16px;
+    }
+
+    /* Larger tap targets for tabs */
+    .tab {
+        padding: 0.75rem 0.5rem;
+        font-size: 0.8rem;
+    }
+
+    .input-toggle {
+        gap: 1.5rem;
+    }
+
+    /* Result link box: stack input full-width, buttons in a row below */
+    .link-box input {
+        flex-basis: 100%;
+    }
+
+    /* Tighter player on small screens */
+    .player {
+        gap: 1.5rem;
+    }
+
+    .state {
+        gap: 2rem;
+    }
+
+    /* How page steps tighter */
+    .step {
+        margin-bottom: 1.5rem;
+    }
+}
+
+/* Very narrow phones (iPhone SE, small Androids) */
+@media (max-width: 360px) {
+    .container {
+        padding: 1rem;
+    }
+
+    h1 {
+        font-size: 1.6rem;
+        letter-spacing: 0.25em;
+    }
+
+    .subtitle {
+        font-size: 0.7rem;
+    }
+
+    .slug-prefix {
+        font-size: 0.7rem;
+    }
+}
+
+/* Landscape phones — don't waste vertical space */
+@media (max-height: 480px) and (orientation: landscape) {
+    body {
+        align-items: flex-start;
+    }
+
+    .container {
+        padding-top: 1rem;
+        padding-bottom: 1rem;
+    }
+
+    h1 {
+        margin-bottom: 0.5rem;
+    }
+
+    .subtitle {
+        margin-bottom: 1rem;
+    }
+
+    .tab-content {
+        min-height: 120px;
     }
 }
