@@ -31,7 +31,7 @@ func main() {
 					Enabled: pulumi.Bool(true),
 					Prefix:  pulumi.String("audio/"),
 					Expiration: &s3.BucketLifecycleRuleExpirationArgs{
-						Days: pulumi.Int(2),
+						Days: pulumi.Int(7),
 					},
 				},
 			},

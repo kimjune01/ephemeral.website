@@ -118,7 +118,7 @@ func (s *Store) CreateToken(ctx context.Context, tokenID, s3Key, note, waveform 
 		Note:      note,
 		Waveform:  waveform,
 		CreatedAt: now.UTC().Format(time.RFC3339),
-		TTL:       now.Add(2 * 24 * time.Hour).Unix(),
+		TTL:       now.Add(7 * 24 * time.Hour).Unix(),
 	}
 
 	item, err := attributevalue.MarshalMap(tok)
