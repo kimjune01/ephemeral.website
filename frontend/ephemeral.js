@@ -250,7 +250,9 @@ function initUpload() {
     }
 
     function selectFile(file) {
-        if (!file.type.startsWith('audio/')) {
+        const audioExt = /\.(mp3|m4a|wav|aac|ogg|flac|opus|webm|mp4|aiff?)$/i;
+        const isAudio = file.type.startsWith('audio/') || audioExt.test(file.name);
+        if (!isAudio) {
             alert('Please select an audio file.');
             return;
         }
