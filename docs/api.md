@@ -2,9 +2,15 @@
 
 Base URL: `https://ephemeral.website/api`
 
-This API is public and open — no keys, no auth, no CORS restrictions (any origin).
-It is intended to be built upon. If you are building a product on top of ephemeral
-(a "layer"), you should only need the routes below.
+This API is public and open — no keys, no auth. It is intended to be built
+upon. If you are building a product on top of ephemeral (a "layer"), you
+should only need the routes below.
+
+**See also:** [`client.md`](client.md) — the client-side protocols that make
+this API actually work correctly. It documents the two-phase link creation
+flow, the two-phase consumption flow, all the UX optimizations, iOS Safari
+workarounds, and fallback paths. If you're implementing a listener or a
+sender from scratch, you want that document as much as this one.
 
 The primitive: upload an audio file, get back a one-time playback link. When the
 recipient plays the link once, the audio is deleted from storage and every
