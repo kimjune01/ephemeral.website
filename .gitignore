@@ -1,5 +1,9 @@
 # Build artifacts
 backend/dist/
+backend/cmd/site/static/index.html
+backend/cmd/site/static/api.html
+backend/cmd/site/static/style.css
+backend/cmd/site/static/ephemeral.js
 *.zip
 
 # Pulumi
