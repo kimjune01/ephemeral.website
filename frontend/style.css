@@ -108,12 +108,22 @@ h1 {
 .record-area {
     border: 1px solid transparent;
     border-radius: 2px;
-    padding: 3rem 2rem;
+    min-height: 220px;
+    padding: 1rem;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     gap: 1rem;
+}
+
+/* Upload tab wrapper — same height as record area to prevent layout shift */
+.upload-tab {
+    min-height: 220px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
 }
 
 .record-prompt {
@@ -188,7 +198,7 @@ h1 {
 }
 
 .tab-content {
-    min-height: 160px;
+    min-height: 220px;
     display: flex;
     align-items: stretch;
 }
