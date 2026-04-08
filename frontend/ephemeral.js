@@ -199,11 +199,14 @@ function initUpload() {
 
     sendBtn.addEventListener('click', () => upload());
 
+    const copyIconHTML = copyBtn.innerHTML;
+    const checkIconHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
+
     copyBtn.addEventListener('click', () => {
         linkOutput.select();
         navigator.clipboard.writeText(linkOutput.value);
-        copyBtn.textContent = 'Copied';
-        setTimeout(() => copyBtn.textContent = 'Copy', 2000);
+        copyBtn.innerHTML = checkIconHTML;
+        setTimeout(() => { copyBtn.innerHTML = copyIconHTML; }, 2000);
     });
 
     // Native share sheet on mobile

@@ -34,6 +34,23 @@ h1 {
     text-transform: lowercase;
     margin-bottom: 0.75rem;
     color: #ccc;
+    text-shadow:
+        -1.5px 0 0 rgba(255, 0, 170, 0.55),
+        1.5px 0 0 rgba(0, 220, 255, 0.55);
+    animation: chroma-drift 6s ease-in-out infinite;
+}
+
+@keyframes chroma-drift {
+    0%, 100% {
+        text-shadow:
+            -1.5px 0 0 rgba(255, 0, 170, 0.55),
+            1.5px 0 0 rgba(0, 220, 255, 0.55);
+    }
+    50% {
+        text-shadow:
+            -2px 0.5px 0 rgba(255, 0, 170, 0.65),
+            2px -0.5px 0 rgba(0, 220, 255, 0.65);
+    }
 }
 
 .subtitle {
@@ -291,11 +308,15 @@ h1 {
 }
 
 .link-box button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
     background: #fff;
     color: #0a0a0a;
     border: none;
     border-radius: 2px;
     padding: 0.75rem 1.5rem;
+    min-height: 44px;
     cursor: pointer;
     font-family: 'Space Mono', monospace;
     font-size: 0.75rem;
@@ -380,23 +401,26 @@ h1 {
 
 .note-meta {
     display: flex;
-    justify-content: space-between;
+    flex-direction: column;
     align-items: center;
+    gap: 0.5rem;
     margin-top: 0.75rem;
 }
 
 .note-meta span {
     font-size: 0.65rem;
-    color: #333;
+    color: #444;
     letter-spacing: 0.05em;
+    align-self: flex-end;
 }
 
 .send-btn {
+    width: 100%;
     background: #fff;
     color: #0a0a0a;
     border: none;
     border-radius: 2px;
-    padding: 0.5rem 1.5rem;
+    padding: 0.75rem 1.5rem;
     cursor: pointer;
     font-family: 'Space Mono', monospace;
     font-size: 0.7rem;
