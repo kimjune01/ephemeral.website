@@ -328,7 +328,7 @@ h1 {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: #fff;
+    background: #b8b8b8;
     color: #0a0a0a;
     border: none;
     border-radius: 2px;
@@ -433,7 +433,7 @@ h1 {
 
 .send-btn {
     width: 100%;
-    background: #fff;
+    background: #b8b8b8;
     color: #0a0a0a;
     border: none;
     border-radius: 2px;
@@ -604,7 +604,7 @@ h1 {
 }
 
 .share-btn {
-    background: #fff;
+    background: #b8b8b8;
     color: #0a0a0a;
     border: none;
     border-radius: 2px;
