@@ -785,11 +785,27 @@ body.breath-held {
     font-family: 'Space Mono', monospace;
     letter-spacing: 0.15em;
     text-transform: uppercase;
-    transition: border-color 0.3s;
+    transition: border-color 0.3s, background 0.3s, color 0.3s, box-shadow 0.3s;
 }
 
 .gone-cta:hover {
     border-color: #888;
+}
+
+/* Post-listen volley CTA — filled, warmer, glowing */
+.gone-cta-primary {
+    background: #b8b8b8;
+    color: #0a0a0a;
+    border-color: #b8b8b8;
+    padding: 0.9rem 2rem;
+    font-size: 0.75rem;
+    box-shadow: 0 0 24px rgba(255, 0, 170, 0.25), 0 0 48px rgba(0, 220, 255, 0.15);
+}
+
+.gone-cta-primary:hover {
+    background: #fff;
+    border-color: #fff;
+    box-shadow: 0 0 32px rgba(255, 0, 170, 0.35), 0 0 64px rgba(0, 220, 255, 0.2);
 }
 
 /* Mobile */

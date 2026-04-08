@@ -574,6 +574,9 @@ function initPlayer(token) {
     function gone(played) {
         if (played) {
             document.getElementById('gone-msg').textContent = 'now it\'s in your head.';
+            const cta = document.getElementById('gone-cta');
+            cta.textContent = 'record one back →';
+            cta.classList.add('gone-cta-primary');
             if (navigator.vibrate) navigator.vibrate(200);
         }
         showState('gone');
