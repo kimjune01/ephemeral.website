@@ -83,7 +83,7 @@ function initUpload() {
             // Stop
             mediaRecorder.stop();
             recordBtn.classList.remove('recording');
-            recordStatus.textContent = 'processing...';
+            recordStatus.textContent = '';
             clearInterval(recordTimer);
             cancelAnimationFrame(levelRAF);
             recordBtn.style.boxShadow = 'none';
