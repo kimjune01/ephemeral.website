@@ -318,6 +318,7 @@ function initUpload() {
             uploadProgress.hidden = true;
             document.querySelector('.tab-content').hidden = true;
             document.querySelector('.input-toggle').hidden = true;
+            document.querySelector('#view-upload .subtitle').hidden = true;
             reveal(result);
             uploadArea.hidden = true;
             document.querySelector('.input-toggle').hidden = true;
