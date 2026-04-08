@@ -126,13 +126,36 @@ func (s *Store) CreateToken(ctx context.Context, tokenID, s3Key, note, waveform 
 		return Token{}, err
 	}
 
-	// Conditional put — fail if token already exists
+	// First try to create the token. Fails if the token already exists.
 	_, err = s.DDB.PutItem(ctx, &dynamodb.PutItemInput{
 		TableName:           &s.TokensTable,
 		Item:                item,
 		ConditionExpression: aws.String("attribute_not_exists(#t)"),
 		ExpressionAttributeNames: map[string]string{
 			"#t": "token",
+		},
+	})
+	if err == nil {
+		return tok, nil
+	}
+
+	// Token already exists. If it has the same s3_key (i.e. the caller owns
+	// it — they reserved it earlier in a multi-phase flow), update note and
+	// waveform in place. Otherwise it's a real collision.
+	_, err = s.DDB.UpdateItem(ctx, &dynamodb.UpdateItemInput{
+		TableName: &s.TokensTable,
+		Key: map[string]ddbtypes.AttributeValue{
+			"token": &ddbtypes.AttributeValueMemberS{Value: tokenID},
+		},
+		UpdateExpression:    aws.String("SET #n = :n, waveform = :w"),
+		ConditionExpression: aws.String("s3_key = :sk"),
+		ExpressionAttributeNames: map[string]string{
+			"#n": "note",
+		},
+		ExpressionAttributeValues: map[string]ddbtypes.AttributeValue{
+			":n":  &ddbtypes.AttributeValueMemberS{Value: note},
+			":w":  &ddbtypes.AttributeValueMemberS{Value: waveform},
+			":sk": &ddbtypes.AttributeValueMemberS{Value: s3Key},
 		},
 	})
 	if err != nil {

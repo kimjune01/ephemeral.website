@@ -62,6 +62,11 @@ function initUpload() {
     let optimisticS3DonePromise = null; // resolves on success, rejects on failure
     let optimisticPromise = null;       // resolves with the POST /upload response (or null)
 
+    // Phase-1 reservation state — set when the user's chosen slug is pre-created
+    // on slug blur / note focus. Phase 2 (Send) then upserts note/waveform.
+    let reservedToken = null;   // {token, slug} of the token held by this user
+    let reservePromise = null;  // in-flight phase-1 request
+
     // Tab switching
     tabUpload.addEventListener('click', () => {
         tabUpload.classList.add('active');
@@ -225,7 +230,59 @@ function initUpload() {
             .replace(/\s+/g, '-')         // spaces → hyphens
             .replace(/[^a-z0-9\-]/g, '')  // strip anything else
             .replace(/-{2,}/g, '-');      // collapse runs of hyphens
+        // Slug changed — invalidate any previous reservation
+        reservedToken = null;
+        reservePromise = null;
     });
+
+    // Phase 1: pre-create the token as soon as the user commits to a slug.
+    // Triggered by both slug-blur and note-focus (whichever fires first).
+    async function reserveSlug() {
+        if (!selectedFile || reservedToken || reservePromise) return;
+        if (!optimisticPromise) return;
+
+        // Need the s3_key from the initial optimistic upload
+        await optimisticPromise;
+        if (!optimisticS3Key) return;
+
+        const desiredSlug = slugInput.value.trim();
+        const tokenToReserve = desiredSlug || crypto.randomUUID();
+
+        reservePromise = (async () => {
+            try {
+                const resp = await fetch(`${API}/upload`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        slug: tokenToReserve,
+                        content_type: selectedFile.type || 'audio/mpeg',
+                        s3_key: optimisticS3Key,
+                    }),
+                });
+                if (resp.status === 409) {
+                    // Only matters when user picked a custom slug
+                    if (desiredSlug) {
+                        slugError.hidden = false;
+                        slugInput.focus();
+                        slugInput.select();
+                    }
+                    return null;
+                }
+                if (!resp.ok) return null;
+                const data = await resp.json();
+                reservedToken = { token: data.token, slug: desiredSlug };
+                return data;
+            } catch {
+                return null;
+            } finally {
+                reservePromise = null;
+            }
+        })();
+        return reservePromise;
+    }
+
+    slugInput.addEventListener('blur', reserveSlug);
+    noteInput.addEventListener('focus', reserveSlug);
 
     sendBtn.addEventListener('click', () => upload());
 
@@ -336,24 +393,61 @@ function initUpload() {
         if (!selectedFile) return;
 
         slugError.hidden = true;
+        sendBtn.disabled = true;
+
+        // Make sure any in-flight phase-1 reservation finishes. Normally the
+        // user has already blurred the slug or focused the note, so this is
+        // a no-op. If they haven't, we kick it off now.
+        if (!reservedToken && !reservePromise) reserveSlug();
+        if (reservePromise) await reservePromise;
+
+        // If phase 1 already flagged a collision, stop here — the user is
+        // still on the note form with the error visible.
+        if (!reservedToken) {
+            sendBtn.disabled = false;
+            if (!slugError.hidden) return; // collision already shown inline
+            // Phase 1 never ran (e.g. optimistic failed). Fall through to a
+            // plain blocking upload.
+            return blockingUpload();
+        }
+
+        // Phase 2: show the share page IMMEDIATELY using the reserved token.
+        const finalUrl = `${window.location.origin}/${reservedToken.token}`;
+        linkOutput.value = finalUrl;
+        noteArea.hidden = true;
+        document.querySelector('.tab-content').hidden = true;
+        document.querySelector('.input-toggle').hidden = true;
+        document.querySelector('#view-upload .subtitle').hidden = true;
+        reveal(result);
+        uploadArea.hidden = true;
+
+        // Background: upsert note + waveform onto the reserved token.
+        // Backend upsert matches on s3_key so this updates the same row.
+        (async () => {
+            try {
+                await fetch(`${API}/upload`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        slug: reservedToken.token,
+                        note: noteInput.value.trim() || undefined,
+                        waveform: waveformData || undefined,
+                        content_type: selectedFile.type || 'audio/mpeg',
+                        s3_key: optimisticS3Key,
+                    }),
+                });
+            } catch {
+                // Silent — the token already exists and is playable even
+                // without the note/waveform updates.
+            }
+        })();
+    }
+
+    // Fallback path: used only when the optimistic upload failed entirely.
+    async function blockingUpload() {
         noteArea.hidden = true;
         uploadProgress.hidden = false;
-        sendBtn.disabled = true;
         progressFill.style.width = '0%';
-
-        // Wait for optimistic upload to settle (POST + S3 PUT)
-        let canReuseS3Key = false;
-        if (optimisticPromise) {
-            await optimisticPromise;
-            if (optimisticS3Key && optimisticS3DonePromise) {
-                try {
-                    await optimisticS3DonePromise;
-                    canReuseS3Key = true;
-                } catch {
-                    canReuseS3Key = false;
-                }
-            }
-        }
 
         try {
             const resp = await fetch(`${API}/upload`, {
@@ -364,7 +458,6 @@ function initUpload() {
                     note: noteInput.value.trim() || undefined,
                     waveform: waveformData || undefined,
                     content_type: selectedFile.type,
-                    s3_key: canReuseS3Key ? optimisticS3Key : undefined,
                 }),
             });
 
@@ -374,7 +467,6 @@ function initUpload() {
                 slugInput.select();
                 reveal(noteArea);
                 uploadProgress.hidden = true;
-                progressFill.style.width = '0%';
                 sendBtn.disabled = false;
                 return;
             }
@@ -385,8 +477,6 @@ function initUpload() {
             }
 
             const data = await resp.json();
-
-            // Show link
             const url = `${window.location.origin}/${data.token}`;
             linkOutput.value = url;
             uploadProgress.hidden = true;
@@ -396,18 +486,14 @@ function initUpload() {
             reveal(result);
             uploadArea.hidden = true;
 
-            // Only re-upload to S3 if the optimistic upload didn't already do it
-            if (!canReuseS3Key) {
-                const xhr = new XMLHttpRequest();
-                xhr.open('PUT', data.upload_url);
-                xhr.setRequestHeader('Content-Type', selectedFile.type);
-                xhr.send(selectedFile);
-            }
+            const xhr = new XMLHttpRequest();
+            xhr.open('PUT', data.upload_url);
+            xhr.setRequestHeader('Content-Type', selectedFile.type);
+            xhr.send(selectedFile);
         } catch (err) {
             alert(err.message);
             reveal(noteArea);
             uploadProgress.hidden = true;
-            progressFill.style.width = '0%';
             sendBtn.disabled = false;
         }
     }
