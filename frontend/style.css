@@ -270,7 +270,12 @@ h1 {
 }
 
 .link-box input {
-    min-width: 0; /* allow shrinking inside flex */
+    flex-basis: 100%;
+    min-width: 0;
+}
+
+.link-box button {
+    flex: 1;
 }
 
 .link-box input {
@@ -739,11 +744,6 @@ body.breath-held {
 
     .input-toggle {
         gap: 1.5rem;
-    }
-
-    /* Result link box: stack input full-width, buttons in a row below */
-    .link-box input {
-        flex-basis: 100%;
     }
 
     /* Tighter player on small screens */
