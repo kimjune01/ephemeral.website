@@ -124,6 +124,7 @@ function initUpload() {
                 computeWaveform(selectedFile).then(w => { waveformData = w; });
                 recordArea.hidden = true;
                 uploadTab.hidden = true;
+                document.querySelector('.tab-content').hidden = true;
                 document.querySelector('.input-toggle').hidden = true;
                 reveal(noteArea);
                 slugInput.focus();
@@ -135,12 +136,31 @@ function initUpload() {
             recordStatus.textContent = '';
             recordTime.hidden = false;
             recordTime.textContent = '0:00';
+            recordTime.style.transform = 'scale(1)';
 
+            const MAX_RECORD_SECONDS = 120;
             recordTimer = setInterval(() => {
                 recordSeconds++;
                 const m = Math.floor(recordSeconds / 60);
                 const s = recordSeconds % 60;
                 recordTime.textContent = `${m}:${s.toString().padStart(2, '0')}`;
+
+                // Grow the timer as we approach the 2-minute cap.
+                // Stay at 1x for the first half, then linearly grow to 3x.
+                const half = MAX_RECORD_SECONDS / 2;
+                const t = Math.max(0, (recordSeconds - half) / half); // 0..1
+                const scale = 1 + 2 * Math.min(t, 1);
+                recordTime.style.transform = `scale(${scale})`;
+
+                // Hard stop at the cap
+                if (recordSeconds >= MAX_RECORD_SECONDS && mediaRecorder && mediaRecorder.state === 'recording') {
+                    mediaRecorder.stop();
+                    recordBtn.classList.remove('recording');
+                    clearInterval(recordTimer);
+                    cancelAnimationFrame(levelRAF);
+                    recordBtn.style.boxShadow = 'none';
+                    if (audioContext) audioContext.close();
+                }
             }, 1000);
 
             // Volume indicator
@@ -274,6 +294,7 @@ function initUpload() {
         computeWaveform(file).then(w => { waveformData = w; });
         uploadTab.hidden = true;
         recordArea.hidden = true;
+        document.querySelector('.tab-content').hidden = true;
         document.querySelector('.input-toggle').hidden = true;
         reveal(noteArea);
         slugInput.focus();
