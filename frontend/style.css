@@ -474,8 +474,14 @@ h1 {
     transition: opacity 0.2s;
 }
 
-.send-btn:hover {
+.send-btn:hover:not(:disabled) {
     opacity: 0.8;
+}
+
+.send-btn:disabled {
+    background: #333;
+    color: #666;
+    cursor: not-allowed;
 }
 
 /* Note (player) */

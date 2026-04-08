@@ -132,6 +132,7 @@ function initUpload() {
                 document.querySelector('.tab-content').hidden = true;
                 document.querySelector('.input-toggle').hidden = true;
                 reveal(noteArea);
+                sendBtn.disabled = true;
                 slugInput.focus();
                 kickoffOptimistic();
             };
@@ -233,6 +234,8 @@ function initUpload() {
         // Slug changed — invalidate any previous reservation
         reservedToken = null;
         reservePromise = null;
+        // Send is disabled until the user commits to a non-empty slug
+        sendBtn.disabled = !slugInput.value.trim();
     });
 
     // Phase 1: pre-create the token as soon as the user commits to a slug.
@@ -241,12 +244,12 @@ function initUpload() {
         if (!selectedFile || reservedToken || reservePromise) return;
         if (!optimisticPromise) return;
 
+        const desiredSlug = slugInput.value.trim();
+        if (!desiredSlug) return; // slugs are required — no auto-generation
+
         // Need the s3_key from the initial optimistic upload
         await optimisticPromise;
         if (!optimisticS3Key) return;
-
-        const desiredSlug = slugInput.value.trim();
-        const tokenToReserve = desiredSlug || crypto.randomUUID();
 
         reservePromise = (async () => {
             try {
@@ -254,18 +257,15 @@ function initUpload() {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        slug: tokenToReserve,
+                        slug: desiredSlug,
                         content_type: selectedFile.type || 'audio/mpeg',
                         s3_key: optimisticS3Key,
                     }),
                 });
                 if (resp.status === 409) {
-                    // Only matters when user picked a custom slug
-                    if (desiredSlug) {
-                        slugError.hidden = false;
-                        slugInput.focus();
-                        slugInput.select();
-                    }
+                    slugError.hidden = false;
+                    slugInput.focus();
+                    slugInput.select();
                     return null;
                 }
                 if (!resp.ok) return null;
@@ -354,6 +354,7 @@ function initUpload() {
         document.querySelector('.tab-content').hidden = true;
         document.querySelector('.input-toggle').hidden = true;
         reveal(noteArea);
+        sendBtn.disabled = true;
         slugInput.focus();
         kickoffOptimistic();
     }
@@ -391,6 +392,10 @@ function initUpload() {
 
     async function upload() {
         if (!selectedFile) return;
+        if (!slugInput.value.trim()) {
+            slugInput.focus();
+            return;
+        }
 
         slugError.hidden = true;
         sendBtn.disabled = true;
@@ -454,7 +459,7 @@ function initUpload() {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    slug: slugInput.value.trim() || undefined,
+                    slug: slugInput.value.trim(),
                     note: noteInput.value.trim() || undefined,
                     waveform: waveformData || undefined,
                     content_type: selectedFile.type,
