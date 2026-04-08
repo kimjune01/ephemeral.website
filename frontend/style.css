@@ -205,6 +205,12 @@ h1 {
     letter-spacing: 0.05em;
 }
 
+.upload-hint {
+    text-align: center;
+    margin-top: 0;
+    margin-bottom: 0.75rem;
+}
+
 .hint a {
     color: #888;
     text-decoration: none;

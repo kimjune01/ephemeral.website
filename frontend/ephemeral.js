@@ -24,6 +24,7 @@ function initUpload() {
     reveal(document.getElementById('view-upload'));
 
     const uploadArea = document.getElementById('upload-area');
+    const uploadTab = document.getElementById('upload-tab');
     const recordArea = document.getElementById('record-area');
     const tabUpload = document.getElementById('tab-upload');
     const tabRecord = document.getElementById('tab-record');
@@ -60,14 +61,14 @@ function initUpload() {
     tabUpload.addEventListener('click', () => {
         tabUpload.classList.add('active');
         tabRecord.classList.remove('active');
-        uploadArea.hidden = false;
+        uploadTab.hidden = false;
         recordArea.hidden = true;
     });
 
     tabRecord.addEventListener('click', () => {
         tabRecord.classList.add('active');
         tabUpload.classList.remove('active');
-        uploadArea.hidden = true;
+        uploadTab.hidden = true;
         recordArea.hidden = false;
     });
 
@@ -117,7 +118,7 @@ function initUpload() {
                 selectedFile = new File([blob], `recording.${ext}`, { type: actualMime });
                 computeWaveform(selectedFile).then(w => { waveformData = w; });
                 recordArea.hidden = true;
-                uploadArea.hidden = true;
+                uploadTab.hidden = true;
                 document.querySelector('.input-toggle').hidden = true;
                 reveal(noteArea);
                 slugInput.focus();
@@ -256,7 +257,7 @@ function initUpload() {
         }
         selectedFile = file;
         computeWaveform(file).then(w => { waveformData = w; });
-        uploadArea.hidden = true;
+        uploadTab.hidden = true;
         recordArea.hidden = true;
         document.querySelector('.input-toggle').hidden = true;
         reveal(noteArea);
