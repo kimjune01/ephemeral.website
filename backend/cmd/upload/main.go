@@ -25,7 +25,11 @@ type uploadRequest struct {
 	Note        string `json:"note"`
 	Waveform    string `json:"waveform"`
 	ContentType string `json:"content_type"`
+	S3Key       string `json:"s3_key,omitempty"`
 }
+
+// audio/<uuid> — only allow reuse of S3 keys we generated ourselves
+var s3KeyPattern = regexp.MustCompile(`^audio/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
 func handler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
 	if store == nil {
@@ -54,8 +58,15 @@ func handler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.AP
 		body.Note = body.Note[:maxNoteLen]
 	}
 
-	// Generate S3 key
-	s3Key := fmt.Sprintf("audio/%s", uuid.New().String())
+	// Reuse S3 key if client supplied one (optimistic upload), otherwise generate
+	s3Key := body.S3Key
+	if s3Key != "" {
+		if !s3KeyPattern.MatchString(s3Key) {
+			return internal.Error(400, "invalid s3_key format"), nil
+		}
+	} else {
+		s3Key = fmt.Sprintf("audio/%s", uuid.New().String())
+	}
 
 	// Create token first (fails fast on slug collision)
 	tok, err := store.CreateToken(ctx, body.Slug, s3Key, body.Note, body.Waveform)
@@ -76,6 +87,7 @@ func handler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.AP
 		"token":      tok.Token,
 		"url":        fmt.Sprintf("/%s", tok.Token),
 		"upload_url": uploadURL,
+		"s3_key":     s3Key,
 	}), nil
 }
 

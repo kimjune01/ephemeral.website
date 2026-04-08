@@ -57,6 +57,11 @@ function initUpload() {
     let analyser = null;
     let levelRAF = null;
 
+    // Optimistic upload state — kicked off as soon as a file is selected
+    let optimisticS3Key = null;
+    let optimisticS3DonePromise = null; // resolves on success, rejects on failure
+    let optimisticPromise = null;       // resolves with the POST /upload response (or null)
+
     // Tab switching
     tabUpload.addEventListener('click', () => {
         tabUpload.classList.add('active');
@@ -122,6 +127,7 @@ function initUpload() {
                 document.querySelector('.input-toggle').hidden = true;
                 reveal(noteArea);
                 slugInput.focus();
+                kickoffOptimistic();
             };
 
             mediaRecorder.start();
@@ -271,6 +277,38 @@ function initUpload() {
         document.querySelector('.input-toggle').hidden = true;
         reveal(noteArea);
         slugInput.focus();
+        kickoffOptimistic();
+    }
+
+    function kickoffOptimistic() {
+        if (!selectedFile || optimisticPromise) return;
+        // Content type may be mismatched on iOS files (.mp3 reported as octet-stream); coerce to audio/*
+        const contentType = selectedFile.type && selectedFile.type.startsWith('audio/')
+            ? selectedFile.type
+            : 'audio/mpeg';
+        optimisticPromise = (async () => {
+            try {
+                const resp = await fetch(`${API}/upload`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ content_type: contentType }),
+                });
+                if (!resp.ok) return null;
+                const data = await resp.json();
+                optimisticS3Key = data.s3_key;
+                optimisticS3DonePromise = new Promise((resolve, reject) => {
+                    const xhr = new XMLHttpRequest();
+                    xhr.open('PUT', data.upload_url);
+                    xhr.setRequestHeader('Content-Type', contentType);
+                    xhr.onload = () => (xhr.status < 300 ? resolve() : reject(new Error('S3 upload failed')));
+                    xhr.onerror = () => reject(new Error('S3 upload error'));
+                    xhr.send(selectedFile);
+                });
+                return data;
+            } catch {
+                return null;
+            }
+        })();
     }
 
     async function upload() {
@@ -282,6 +320,20 @@ function initUpload() {
         sendBtn.disabled = true;
         progressFill.style.width = '0%';
 
+        // Wait for optimistic upload to settle (POST + S3 PUT)
+        let canReuseS3Key = false;
+        if (optimisticPromise) {
+            await optimisticPromise;
+            if (optimisticS3Key && optimisticS3DonePromise) {
+                try {
+                    await optimisticS3DonePromise;
+                    canReuseS3Key = true;
+                } catch {
+                    canReuseS3Key = false;
+                }
+            }
+        }
+
         try {
             const resp = await fetch(`${API}/upload`, {
                 method: 'POST',
@@ -291,6 +343,7 @@ function initUpload() {
                     note: noteInput.value.trim() || undefined,
                     waveform: waveformData || undefined,
                     content_type: selectedFile.type,
+                    s3_key: canReuseS3Key ? optimisticS3Key : undefined,
                 }),
             });
 
@@ -312,7 +365,7 @@ function initUpload() {
 
             const data = await resp.json();
 
-            // Show link immediately — optimistic
+            // Show link
             const url = `${window.location.origin}/${data.token}`;
             linkOutput.value = url;
             uploadProgress.hidden = true;
@@ -321,13 +374,14 @@ function initUpload() {
             document.querySelector('#view-upload .subtitle').hidden = true;
             reveal(result);
             uploadArea.hidden = true;
-            document.querySelector('.input-toggle').hidden = true;
 
-            // Upload to S3 in background
-            const xhr = new XMLHttpRequest();
-            xhr.open('PUT', data.upload_url);
-            xhr.setRequestHeader('Content-Type', selectedFile.type);
-            xhr.send(selectedFile);
+            // Only re-upload to S3 if the optimistic upload didn't already do it
+            if (!canReuseS3Key) {
+                const xhr = new XMLHttpRequest();
+                xhr.open('PUT', data.upload_url);
+                xhr.setRequestHeader('Content-Type', selectedFile.type);
+                xhr.send(selectedFile);
+            }
         } catch (err) {
             alert(err.message);
             reveal(noteArea);
