@@ -194,7 +194,11 @@ function initUpload() {
 
     slugInput.addEventListener('input', () => {
         slugError.hidden = true;
-        slugInput.value = slugInput.value.toLowerCase().replace(/[^a-z0-9\-]/g, '');
+        slugInput.value = slugInput.value
+            .toLowerCase()
+            .replace(/\s+/g, '-')         // spaces → hyphens
+            .replace(/[^a-z0-9\-]/g, '')  // strip anything else
+            .replace(/-{2,}/g, '-');      // collapse runs of hyphens
     });
 
     sendBtn.addEventListener('click', () => upload());
