@@ -48,10 +48,10 @@ func handler(_ context.Context, req events.APIGatewayV2HTTPRequest) (events.APIG
 		ct = "text/plain"
 	}
 
-	// Cache static assets, not HTML
+	// Cache static assets briefly while iterating; HTML stays no-cache
 	cacheControl := "no-cache"
 	if !strings.HasSuffix(filename, ".html") {
-		cacheControl = "public, max-age=3600"
+		cacheControl = "public, max-age=60"
 	}
 
 	return events.APIGatewayV2HTTPResponse{
