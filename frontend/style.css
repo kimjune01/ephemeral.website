@@ -168,7 +168,7 @@ h1 {
 }
 
 .tab-content {
-    min-height: 220px;
+    min-height: 160px;
     display: flex;
     align-items: stretch;
 }
@@ -181,7 +181,7 @@ h1 {
 .upload-area {
     border: 1px solid #444;
     border-radius: 2px;
-    padding: 3rem 2rem;
+    padding: 1.5rem 1.5rem;
     cursor: pointer;
     transition: border-color 0.3s, background 0.3s;
 }
@@ -203,6 +203,18 @@ h1 {
     color: #666 !important;
     margin-top: 0.75rem;
     letter-spacing: 0.05em;
+}
+
+.hint a {
+    color: #888;
+    text-decoration: none;
+    border-bottom: 1px solid #555;
+    transition: color 0.2s, border-color 0.2s;
+}
+
+.hint a:hover {
+    color: #aaa;
+    border-color: #888;
 }
 
 /* Progress */
