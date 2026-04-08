@@ -723,7 +723,10 @@ body.breath-held {
         font-size: 1.8rem;
     }
 
-    /* Prevent iOS zoom on input focus */
+    /* Prevent iOS zoom on input focus — must override the more-specific class rules */
+    .slug-field input,
+    .note-area textarea,
+    .link-box input,
     input, textarea, select {
         font-size: 16px;
     }
